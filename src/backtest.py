@@ -53,12 +53,14 @@ class NisaJQuantBacktester:
         if USE_SCALECAT_FILTER:
             # scalecatでフィルタリング（market_cap代替）
             scalecat_list = "', '".join(SCALECAT_TARGETS)
+            # FIX: AND f.scalecat IN (...) を追加
             query = f"""
             SELECT p.date, p.code, p.open, p.high, p.low, p.close, 
                    p.adjustmentclose as adj_close, p.volume, f.scalecat
             FROM prices p
             LEFT JOIN fundamentals f ON p.code = f.code
             WHERE p.date >= '{start_date}'
+            AND f.scalecat IN ('{scalecat_list}')
             ORDER BY p.code, p.date ASC
             """
         else:
