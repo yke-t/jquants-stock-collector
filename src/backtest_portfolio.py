@@ -11,10 +11,12 @@ from pathlib import Path
 # --- Config ---
 DB_PATH = Path(__file__).parent.parent / "stock_data.db"
 INITIAL_CAPITAL = 3000000  # 初期資金 300万円
-MAX_POSITIONS = 5          # 最大保有銘柄数
-STOP_LOSS_PCT = 0.10       # 損切り -10%
-TRAILING_STOP_PCT = 0.15   # トレーリングストップ -15%
-DIP_THRESHOLD = 0.98       # 押し目閾値
+
+# Emergency Tuning: 分散 + 厳格化
+MAX_POSITIONS = 15         # 銘柄数を増やしてリスク分散（1銘柄 6.6%）
+STOP_LOSS_PCT = 0.07       # 損切りを浅くする（-10% -> -7%）
+DIP_THRESHOLD = 0.95       # より深く押した（割安な）タイミングだけ拾う
+TRAILING_STOP_PCT = 0.20   # 利益は伸ばす（-15% -> -20%）
 
 USE_SCALECAT_FILTER = True
 SCALECAT_TARGETS = ['TOPIX Small 1', 'TOPIX Small 2', 'TOPIX Mid400']
