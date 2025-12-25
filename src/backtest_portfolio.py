@@ -8,17 +8,19 @@ import numpy as np
 from tqdm import tqdm
 from pathlib import Path
 
-# --- Config (前回のチューニング設定を維持) ---
+# --- Config (The Safety First - Coward's Strategy) ---
 DB_PATH = Path(__file__).parent.parent / "stock_data.db"
 INITIAL_CAPITAL = 3000000  # 300万円
-MAX_POSITIONS = 15         # 15銘柄分散
-STOP_LOSS_PCT = 0.07       # -7% 損切り
-TRAILING_STOP_PCT = 0.20   # -20% トレーリング
-DIP_THRESHOLD = 0.95       # 押し目 0.95
 
-# NEW: 市場環境フィルター閾値
-# 小型株全体の何%が上昇トレンド(MA75超え)なら買うか？
-MARKET_BULLISH_THRESHOLD = 0.20  # 20%を下回る「全面安」の時は買わない
+# 防御最優先設定
+MAX_POSITIONS = 20         # さらに分散 (1銘柄 5% まで)
+STOP_LOSS_PCT = 0.05       # 損切り -5% (ノイズで狩られても良い、大怪我を防ぐ)
+TRAILING_STOP_PCT = 0.10   # トレーリング -10% (利益が出たら即確保)
+DIP_THRESHOLD = 0.97       # 押し目 0.97 (極端な安値を待たない)
+
+# 市場環境フィルター (大幅強化)
+# 「小型株の4割以上が上昇トレンド」の時しか戦わない
+MARKET_BULLISH_THRESHOLD = 0.40
 
 USE_SCALECAT_FILTER = True
 SCALECAT_TARGETS = ['TOPIX Small 1', 'TOPIX Small 2', 'TOPIX Mid400']
