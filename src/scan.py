@@ -154,7 +154,8 @@ def analyze_market():
                 'name': str(row.get('company_name', '')),
                 'current_price': int(row['close']),
                 'ma25_rate': round((row['dip_ratio'] - 1) * 100, 2),
-                'stop_loss': int(row['close'] * (1 - STOP_LOSS_PCT))
+                'stop_loss': int(row['close'] * (1 - STOP_LOSS_PCT)),
+                'take_profit': int(row['ma_short'])  # 利確目標（MA25）
             })
 
         # 通知実行
