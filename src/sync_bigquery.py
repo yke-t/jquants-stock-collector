@@ -15,7 +15,7 @@ DB_PATH = Path(__file__).parent.parent / "stock_data.db"
 GCP_PROJECT_ID = "nisa-jquant"
 BQ_DATASET = "stock_data"
 BQ_TABLE_PRICES = "prices"
-SYNC_DAYS = 7  # 直近7日分を同期
+SYNC_DAYS = 1  # 直近1日分を同期（前日分）
 
 
 def get_recent_data(db_path: Path, days: int) -> pd.DataFrame:
