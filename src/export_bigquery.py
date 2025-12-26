@@ -19,7 +19,7 @@ from datetime import datetime
 DB_PATH = Path(__file__).parent.parent / "stock_data.db"
 
 # BigQuery設定（ユーザーが設定）
-GCP_PROJECT_ID = "your-project-id"  # ← GCPプロジェクトIDを設定
+GCP_PROJECT_ID = "nisa-jquant"  # GCPプロジェクトID
 BQ_DATASET = "stock_data"           # データセット名
 BQ_TABLE_PRICES = "prices"          # 株価テーブル
 BQ_TABLE_FUNDAMENTALS = "fundamentals"  # 銘柄マスタテーブル

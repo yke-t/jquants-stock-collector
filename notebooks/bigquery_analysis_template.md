@@ -23,7 +23,7 @@ auth.authenticate_user()
 
 ```python
 # プロジェクト設定（自分のプロジェクトIDに変更）
-PROJECT_ID = "your-project-id"  # ← 変更してください
+PROJECT_ID = "nisa-jquant"  # プロジェクトID
 DATASET = "stock_data"
 
 # BigQueryクライアント
