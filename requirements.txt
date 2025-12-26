@@ -4,3 +4,4 @@ python-dotenv>=1.0.0
 tqdm>=4.65.0
 gspread>=5.10.0
 google-auth>=2.20.0
+yfinance>=1.0
