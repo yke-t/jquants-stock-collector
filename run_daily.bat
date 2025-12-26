@@ -17,7 +17,7 @@ python main.py >> %LOGFILE% 2>&1
 
 :: 3. Signal Scan (市場環境判定とシグナル生成)
 echo [STEP 2] Scanning Signals... >> %LOGFILE%
-python src/scan.py >> %LOGFILE% 2>&1
+python -m src.scan >> %LOGFILE% 2>&1
 
 echo [END] Finished: %date% %time% >> %LOGFILE%
 echo ======================================================== >> %LOGFILE%

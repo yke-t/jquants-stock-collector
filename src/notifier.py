@@ -19,7 +19,7 @@ SECRET_KEY_PATH = Path(__file__).parent.parent / "secret_key.json"
 
 # デフォルト設定（呼び出し元で上書き可能だが、基本はここを修正）
 # 注意: 共有設定したスプレッドシートのIDをここに設定してください
-SPREADSHEET_KEY = "YOUR_SPREADSHEET_ID_HERE"
+SPREADSHEET_KEY = "1Hejm_UXA3xvn5rEXUhMkpHPtSjM2-foq-t1Su96gGYo"
 SHEET_NAME = "Signals"
 
 # API Scopes
