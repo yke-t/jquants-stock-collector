@@ -146,35 +146,40 @@ def analyze_market():
     
     # --- Google Sheets通知処理 ---
     if ENABLE_SHEETS_NOTIFICATION:
-        print("\n[NOTIFIER] Preparing to update Google Sheets...")
-        
-        try:
-            from src.notifier import update_signal_sheet
-            
-            # candidatesをnotifier形式に変換
-            signal_data = []
-            for _, row in candidates.head(20).iterrows():
-                signal = {
-                    'code': str(row['code']),
-                    'name': str(row.get('company_name', '')),
-                    'current_price': int(row['close']),
-                    'ma25_rate': round((row['dip_ratio'] - 1) * 100, 2),  # 乖離率%
-                    'stop_loss': int(row['close'] * (1 - STOP_LOSS_PCT))  # 損切りライン
-                }
-                signal_data.append(signal)
-            
-            # Sheetsに書き込み
-            result = update_signal_sheet(signal_data)
-            if result:
-                print("[NOTIFIER] Google Sheets updated successfully.")
-            else:
-                print("[NOTIFIER] Sheets update skipped or failed.")
+        # データ変換 (DataFrame -> List[Dict])
+        formatted_signals = []
+        for _, row in candidates.head(20).iterrows():
+            formatted_signals.append({
+                'code': str(row['code']),
+                'name': str(row.get('company_name', '')),
+                'current_price': int(row['close']),
+                'ma25_rate': round((row['dip_ratio'] - 1) * 100, 2),
+                'stop_loss': int(row['close'] * (1 - STOP_LOSS_PCT))
+            })
+
+        # 通知実行
+        if formatted_signals:
+            print("\n[NOTIFIER] Sending signals to Google Sheets...")
+            try:
+                from src.notifier import update_signal_sheet, SPREADSHEET_KEY
                 
-        except ImportError as e:
-            print(f"[NOTIFIER] Module import failed: {e}")
-            print("[NOTIFIER] Run: pip install gspread google-auth")
-        except Exception as e:
-            print(f"[NOTIFIER] Error: {e}")
+                # SPREADSHEET_KEYが設定されているか確認
+                if SPREADSHEET_KEY == "YOUR_SPREADSHEET_ID_HERE":
+                    print("[NOTIFIER] WARN: Spreadsheet ID not set in src/notifier.py. Skipping.")
+                else:
+                    success = update_signal_sheet(formatted_signals)
+                    if success:
+                        print("[NOTIFIER] Done.")
+                    else:
+                        print("[NOTIFIER] Failed to update sheet. Check logs.")
+                        
+            except ImportError:
+                print("[NOTIFIER] WARN: 'src.notifier' module not found or dependencies missing.")
+                print("[NOTIFIER] Run: pip install gspread google-auth")
+            except Exception as e:
+                print(f"[NOTIFIER] ERROR: Unexpected error during notification: {e}")
+        else:
+            print("\n[NOTIFIER] No signals to report. Skipping Sheet update.")
 
 
 if __name__ == "__main__":
