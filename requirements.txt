@@ -2,3 +2,5 @@ jquants-api-client>=2.0.0
 pandas>=2.0.0
 python-dotenv>=1.0.0
 tqdm>=4.65.0
+gspread>=5.10.0
+google-auth>=2.20.0

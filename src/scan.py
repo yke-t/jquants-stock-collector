@@ -1,6 +1,7 @@
 """
 Phase 3: Daily Signal Scanner
 毎日のデータ更新後に実行し、翌日のエントリー候補と市場環境を出力する。
+Google Sheets連携機能付き。
 """
 import sqlite3
 import pandas as pd
@@ -12,10 +13,14 @@ from datetime import datetime
 DB_PATH = Path(__file__).parent.parent / "stock_data.db"
 DIP_THRESHOLD = 0.97       # 押し目
 MARKET_BULLISH_THRESHOLD = 0.40  # 市場環境フィルター
+STOP_LOSS_PCT = 0.05       # 損切り -5% (Golden Configurationより)
 
 # フィルタリング設定
 USE_SCALECAT_FILTER = True
 SCALECAT_TARGETS = ['TOPIX Small 1', 'TOPIX Small 2', 'TOPIX Mid400']
+
+# Google Sheets連携（オプション）
+ENABLE_SHEETS_NOTIFICATION = True
 
 
 def analyze_market():
@@ -118,20 +123,60 @@ def analyze_market():
     
     if candidates.empty:
         print("No candidates found today.")
-    else:
-        candidates = candidates.sort_values('dip_ratio')
+        print(f"{'='*60}")
         
-        print(f"Found {len(candidates)} candidates:")
-        print("-" * 60)
-        print(f"{'Code':<8} {'Close':>12} {'MA25':>12} {'Dip':>10}")
-        print("-" * 60)
+        # Google Sheets更新（空の場合はスキップ）
+        if ENABLE_SHEETS_NOTIFICATION:
+            print("[NOTIFIER] No signals to update.")
+        return
+    
+    # 候補がある場合
+    candidates = candidates.sort_values('dip_ratio')
+    
+    print(f"Found {len(candidates)} candidates:")
+    print("-" * 60)
+    print(f"{'Code':<8} {'Close':>12} {'MA25':>12} {'Dip':>10}")
+    print("-" * 60)
+    
+    for _, row in candidates.head(20).iterrows():
+        dip_pct = (row['dip_ratio'] - 1) * 100
+        print(f"{row['code']:<8} {row['close']:>12,.0f} {row['ma_short']:>12,.0f} {dip_pct:>9.1f}%")
         
-        for _, row in candidates.head(20).iterrows():
-            dip_pct = (row['dip_ratio'] - 1) * 100
-            print(f"{row['code']:<8} {row['close']:>12,.0f} {row['ma_short']:>12,.0f} {dip_pct:>9.1f}%")
-            
     print(f"{'='*60}")
+    
+    # --- Google Sheets通知処理 ---
+    if ENABLE_SHEETS_NOTIFICATION:
+        print("\n[NOTIFIER] Preparing to update Google Sheets...")
+        
+        try:
+            from src.notifier import update_signal_sheet
+            
+            # candidatesをnotifier形式に変換
+            signal_data = []
+            for _, row in candidates.head(20).iterrows():
+                signal = {
+                    'code': str(row['code']),
+                    'name': str(row.get('company_name', '')),
+                    'current_price': int(row['close']),
+                    'ma25_rate': round((row['dip_ratio'] - 1) * 100, 2),  # 乖離率%
+                    'stop_loss': int(row['close'] * (1 - STOP_LOSS_PCT))  # 損切りライン
+                }
+                signal_data.append(signal)
+            
+            # Sheetsに書き込み
+            result = update_signal_sheet(signal_data)
+            if result:
+                print("[NOTIFIER] Google Sheets updated successfully.")
+            else:
+                print("[NOTIFIER] Sheets update skipped or failed.")
+                
+        except ImportError as e:
+            print(f"[NOTIFIER] Module import failed: {e}")
+            print("[NOTIFIER] Run: pip install gspread google-auth")
+        except Exception as e:
+            print(f"[NOTIFIER] Error: {e}")
 
 
 if __name__ == "__main__":
     analyze_market()
+
