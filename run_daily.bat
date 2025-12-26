@@ -29,6 +29,10 @@ if "%USE_YFINANCE%"=="1" (
 echo [STEP 2] Scanning Signals... >> %LOGFILE%
 python -m src.scan >> %LOGFILE% 2>&1
 
+:: 4. BigQuery Sync (差分更新)
+echo [STEP 3] Syncing to BigQuery... >> %LOGFILE%
+python -m src.sync_bigquery >> %LOGFILE% 2>&1
+
 echo [END] Finished: %date% %time% >> %LOGFILE%
 echo ======================================================== >> %LOGFILE%
 
