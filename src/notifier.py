@@ -78,8 +78,8 @@ def update_signal_sheet(signal_data: List[Dict[str, Any]], spreadsheet_key: str 
             logger.info(f"[NOTIFIER] Sheet '{SHEET_NAME}' not found. Creating new sheet...")
             worksheet = sh.add_worksheet(title=SHEET_NAME, rows=100, cols=10)
 
-        # ヘッダー定義（利確目標を追加）
-        header = ['更新日時', '銘柄コード', '銘柄名', '現在値', 'MA25乖離率(%)', '損切りライン', '利確目標(MA25)']
+        # ヘッダー定義（判定結果を追加）
+        header = ['更新日時', '銘柄コード', '銘柄名', '現在値', 'MA25乖離率(%)', '損切りライン', '利確目標(MA25)', '判定結果', '判定理由', 'News Hit']
         
         # データ行の生成
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M')
@@ -93,7 +93,10 @@ def update_signal_sheet(signal_data: List[Dict[str, Any]], spreadsheet_key: str 
                 item.get('current_price', 0),
                 item.get('ma25_rate', 0.0),
                 item.get('stop_loss', 0),
-                item.get('take_profit', 0)  # 利確目標（MA25）
+                item.get('take_profit', 0),  # 利確目標（MA25）
+                str(item.get('verdict', 'N/A')),  # 判定結果
+                str(item.get('reason', '')),  # 判定理由
+                str(item.get('news_hit', '') or '')  # News Hit
             ])
             
         # 既存データをクリアして書き込み

@@ -155,8 +155,40 @@ def analyze_market():
                 'current_price': int(row['close']),
                 'ma25_rate': round((row['dip_ratio'] - 1) * 100, 2),
                 'stop_loss': int(row['close'] * (1 - STOP_LOSS_PCT)),
-                'take_profit': int(row['ma_short'])  # 利確目標（MA25）
+                'take_profit': int(row['ma_short']),  # 利確目標（MA25）
+                'dip_pct': round((row['dip_ratio'] - 1) * 100, 2)  # news_analyzer用
             })
+
+        # --- ニュース分析を実行 ---
+        try:
+            from src.news_analyzer import batch_analyze
+            print("\n[NEWS] Analyzing signals for entry validation...")
+            analysis_results = batch_analyze(formatted_signals)
+            
+            # 判定結果をシグナルデータにマージ
+            for signal, analysis in zip(formatted_signals, analysis_results):
+                signal['verdict'] = analysis.get('verdict', 'WATCH')
+                signal['reason'] = analysis.get('reason', '')
+                signal['news_hit'] = analysis.get('news_hit', '')
+                
+            # 判定結果をサマリー表示
+            entry_count = sum(1 for s in formatted_signals if s.get('verdict') == 'ENTRY')
+            watch_count = sum(1 for s in formatted_signals if s.get('verdict') == 'WATCH')
+            reject_count = sum(1 for s in formatted_signals if s.get('verdict') == 'REJECT')
+            print(f"[NEWS] Analysis complete: ENTRY={entry_count}, WATCH={watch_count}, REJECT={reject_count}")
+            
+        except ImportError:
+            print("[NEWS] WARN: 'src.news_analyzer' not found. Skipping news analysis.")
+            for signal in formatted_signals:
+                signal['verdict'] = 'N/A'
+                signal['reason'] = 'Analysis skipped'
+                signal['news_hit'] = ''
+        except Exception as e:
+            print(f"[NEWS] ERROR: {e}")
+            for signal in formatted_signals:
+                signal['verdict'] = 'N/A'
+                signal['reason'] = f'Error: {str(e)[:30]}'
+                signal['news_hit'] = ''
 
         # 通知実行
         if formatted_signals:

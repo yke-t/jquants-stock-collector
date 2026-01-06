@@ -138,19 +138,93 @@ df_signals
 ## 新ロジックのテスト（カスタマイズ用）
 
 ```python
-# ここに新しいロジックを記述
-# 例: RSI計算、ボリンジャーバンド、出来高分析など
-
+# RSI（相対力指数）による「深すぎる押し目」の判定
 query = f"""
--- 新しい戦略ロジックをここに記述
+WITH price_changes AS (
+  SELECT 
+    date, code, close,
+    close - LAG(close) OVER (PARTITION BY code ORDER BY date) as diff
+  FROM `nisa-jquant.stock_data.prices` -- プロジェクトIDは環境に合わせて変更してください
+),
+gains_losses AS (
+  SELECT 
+    *,
+    IF(diff > 0, diff, 0) as gain,
+    IF(diff < 0, ABS(diff), 0) as loss
+  FROM price_changes
+),
+rsi_calc AS (
+  SELECT 
+    *,
+    AVG(gain) OVER (PARTITION BY code ORDER BY date ROWS BETWEEN 13 PRECEDING AND CURRENT ROW) as avg_gain,
+    AVG(loss) OVER (PARTITION BY code ORDER BY date ROWS BETWEEN 13 PRECEDING AND CURRENT ROW) as avg_loss
+  FROM gains_losses
+)
 SELECT 
-  date,
-  code,
-  close,
-  volume
-FROM `{PROJECT_ID}.{DATASET}.prices`
+  date, code, close,
+  ROUND(100 - (100 / (1 + (avg_gain / NULLIF(avg_loss, 0)))), 1) as rsi_14
+FROM rsi_calc
 WHERE date >= '2024-01-01'
-LIMIT 1000
+ORDER BY code, date
+"""
+df_custom = client.query(query).to_dataframe()
+df_custom.head()
+```
+
+```python
+# セクターローテーション分析（業種別モメンタム）
+query = f"""
+WITH sector_prices AS (
+  SELECT 
+    p.date,
+    f.sector17codename as sector, -- 17業種区分を使用
+    AVG(p.close) as avg_price -- 単純平均（時価総額加重ではない簡易版）
+  FROM `nisa-jquant.stock_data.prices` p
+  JOIN `nisa-jquant.stock_data.fundamentals` f ON p.code = f.code
+  WHERE p.date >= DATE_SUB(CURRENT_DATE(), INTERVAL 2 MONTH)
+  GROUP BY 1, 2
+),
+momentum AS (
+  SELECT 
+    date,
+    sector,
+    avg_price,
+    LAG(avg_price, 20) OVER (PARTITION BY sector ORDER BY date) as price_1m_ago,
+    (avg_price / LAG(avg_price, 20) OVER (PARTITION BY sector ORDER BY date) - 1) * 100 as return_1m
+  FROM sector_prices
+)
+SELECT * FROM momentum
+WHERE date = (SELECT MAX(date) FROM momentum)
+ORDER BY return_1m DESC
+"""
+df_custom = client.query(query).to_dataframe()
+df_custom.head()
+```
+
+```python
+# ボラティリティ（HV）によるリスク管理
+query = f"""
+WITH log_returns AS (
+  SELECT 
+    date, code, close,
+    LN(close / LAG(close) OVER (PARTITION BY code ORDER BY date)) as log_ret
+  FROM `nisa-jquant.stock_data.prices`
+),
+volatility AS (
+  SELECT 
+    date, code, close,
+    -- 20日間の標準偏差 × √252 (年率換算)
+    STDDEV(log_ret) OVER (PARTITION BY code ORDER BY date ROWS BETWEEN 19 PRECEDING AND CURRENT ROW) * SQRT(252) * 100 as hv_annual
+  FROM log_returns
+)
+SELECT 
+  date, code, close, 
+  ROUND(hv_annual, 2) as hv_score,
+  -- HVが高い銘柄は損切り幅を広く、低い銘柄は狭くする例
+  ROUND(close * (1 - (hv_annual / 100 * 0.5)), 0) as dynamic_stop_loss
+FROM volatility
+WHERE date >= '2024-01-01'
+ORDER BY hv_score DESC
 """
 df_custom = client.query(query).to_dataframe()
 df_custom.head()
