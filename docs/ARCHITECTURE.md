@@ -22,6 +22,7 @@ jquants-stock-collector/
 │   ├── collector.py         # データ収集ロジック
 │   ├── database.py          # SQLiteデータベース操作
 │   ├── scan.py              # 日次シグナルスキャナー
+│   ├── news_analyzer.py     # 暴落銘柄自動調査（Phase 5）
 │   ├── notifier.py          # Google Sheets通知
 │   ├── update_yfinance.py   # yfinance日次データ更新（J-Quants代替）
 │   ├── sync_bigquery.py     # BigQuery差分同期
@@ -31,10 +32,7 @@ jquants-stock-collector/
 ├── notebooks/
 │   └── bigquery_analysis_template.md  # Colab分析テンプレート
 └── docs/
-    ├── ARCHITECTURE.md
-    ├── implementation_plan.md
-    ├── task.md
-    └── walkthrough.md
+    └── ARCHITECTURE.md
 ```
 
 ---
@@ -54,13 +52,16 @@ graph TD
     
     D --> E[scan.py]
     E -->|市場判定+シグナル| F{GREEN?}
-    F -->|Yes| G[notifier.py]
-    G -->|gspread| H[Google Sheets]
-    F -->|No| I[終了: Cash is King]
+    F -->|Yes| G[news_analyzer.py]
+    G -->|ニュース検索| H{REJECT?}
+    H -->|No| I[notifier.py]
+    I -->|gspread| J[Google Sheets]
+    H -->|Yes| K[REJECT: 悪材料検出]
+    F -->|No| L[終了: Cash is King]
     
-    D -->|MERGE| J[sync_bigquery.py]
-    J --> K[(BigQuery)]
-    K --> L[Colab分析]
+    D -->|MERGE| M[sync_bigquery.py]
+    M --> N[(BigQuery)]
+    N --> O[Colab分析]
 ```
 
 ---
@@ -73,6 +74,7 @@ sequenceDiagram
     participant Bat as run_daily.bat
     participant Data as データ取得
     participant Scan as scan.py
+    participant News as news_analyzer.py
     participant Sheets as Google Sheets
     participant BQ as BigQuery
     
@@ -80,6 +82,8 @@ sequenceDiagram
     Bat->>Data: STEP1: J-Quants or yfinance
     Data-->>Bat: データ更新完了
     Bat->>Scan: STEP2: シグナルスキャン
+    Scan->>News: ニュース分析
+    News-->>Scan: ENTRY/WATCH/REJECT判定
     Scan->>Sheets: シグナル書き込み
     Bat->>BQ: STEP3: 差分同期（前日分）
     Bat-->>Scheduler: ログ出力完了
@@ -101,6 +105,7 @@ sequenceDiagram
 | モジュール | 説明 | 出力先 |
 |-----------|------|--------|
 | `scan.py` | 市場環境判定+シグナル抽出 | コンソール |
+| `news_analyzer.py` | 暴落銘柄の悪材料検索+地合い比較 | scan.pyへ判定結果返却 |
 | `notifier.py` | シグナルをスプレッドシートに書き込み | Google Sheets |
 
 ### BigQuery連携系
@@ -109,6 +114,32 @@ sequenceDiagram
 |-----------|------|------|
 | `export_bigquery.py` | 全量エクスポート | SQLite → BigQuery (REPLACE) |
 | `sync_bigquery.py` | 差分同期（日次） | 前日分のみ MERGE |
+
+---
+
+## Phase 5: 暴落銘柄自動調査
+
+### 判定ロジック
+
+```mermaid
+graph TD
+    A[シグナル銘柄] --> B[Phase 1: Event Filter]
+    B -->|Killer Keywords検出| C[REJECT]
+    B -->|ヒットなし| D[Phase 2: Context Filter]
+    D -->|連れ安| E[ENTRY]
+    D -->|固有下落| F[WATCH]
+```
+
+### Killer Keywords
+`下方修正`, `減配`, `不祥事`, `ストップ安`, `課徴金`, `業績悪化`, `赤字転落`, `倒産`, `粉飾`
+
+### 出力カラム（Google Sheets）
+
+| カラム | 説明 |
+|--------|------|
+| 判定結果 | ENTRY / WATCH / REJECT |
+| 判定理由 | Sector:連れ安 / Individual:固有下落 / News:下方修正検出 |
+| News Hit | 検出されたニュースタイトル |
 
 ---
 
@@ -141,6 +172,7 @@ gspread>=5.10.0
 google-auth>=2.20.0
 yfinance>=1.0
 pandas-gbq>=0.19.0
+duckduckgo_search>=8.0.0
 ```
 
 ### GCP設定
