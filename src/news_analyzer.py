@@ -5,18 +5,29 @@ News Analyzer Module
 
 Phase 1: Event Filter - ネガティブニュース検索（Killer Keywords）
 Phase 2: Context Filter - 日経平均との比較（連れ安判定）
+
+Search Provider: Google Custom Search API (100回/日無料)
 """
+import os
+import requests
 import yfinance as yf
-from duckduckgo_search import DDGS
 from datetime import datetime, timedelta
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 import logging
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Logging
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
 
 # --- Configuration ---
+# Google Custom Search API
+GOOGLE_CSE_API_KEY = os.getenv("GOOGLE_CSE_API_KEY", "")
+GOOGLE_CSE_ID = os.getenv("GOOGLE_CSE_ID", "")
+
 # Killer Keywords（悪材料検出用）
 KILLER_KEYWORDS = [
     "下方修正",
@@ -50,9 +61,9 @@ def get_nikkei_change() -> float:
     return 0.0
 
 
-def search_news(company_name: str, max_results: int = 3) -> list:
+def search_news_google(company_name: str, max_results: int = 3) -> List[dict]:
     """
-    DuckDuckGoでニュース検索（Killer Keywords）
+    Google Custom Search APIでニュース検索（Killer Keywords）
     
     Args:
         company_name: 銘柄名
@@ -61,62 +72,53 @@ def search_news(company_name: str, max_results: int = 3) -> list:
     Returns:
         ヒットしたニュースのリスト [{'title': str, 'keyword': str}, ...]
     """
-    import time
-    import random
+    if not GOOGLE_CSE_API_KEY or not GOOGLE_CSE_ID:
+        logger.warning("[NEWS] Google CSE API key or ID not configured. Skipping search.")
+        return []
     
-    # シンプルなクエリ
-    query = f"{company_name} 株価"
+    # 検索クエリ（銘柄名 + Killer Keywords）
+    keywords_query = " OR ".join(KILLER_KEYWORDS[:5])  # 最初の5つのキーワード
+    query = f"{company_name} ({keywords_query})"
     
-    def execute_search():
-        """検索を実行する内部関数"""
-        with DDGS() as ddgs:
-            return list(ddgs.news(
-                query,
-                region="jp-jp",
-                safesearch="off",
-                timelimit="d",  # 過去1日
-                max_results=max_results
-            ))
+    # Google Custom Search API呼び出し
+    url = "https://www.googleapis.com/customsearch/v1"
+    params = {
+        "key": GOOGLE_CSE_API_KEY,
+        "cx": GOOGLE_CSE_ID,
+        "q": query,
+        "num": max_results,
+        "lr": "lang_ja",  # 日本語
+        "dateRestrict": "d7",  # 過去7日
+    }
     
     hits = []
-    results = []
-    
     try:
-        # 初回検索
-        results = execute_search()
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
         
+        items = data.get("items", [])
+        logger.info(f"[NEWS] Google CSE returned {len(items)} results for {company_name}")
+        
+        for item in items:
+            title = item.get("title", "")
+            snippet = item.get("snippet", "")
+            text = title + " " + snippet
+            
+            # Killer Keywordsを検出
+            for keyword in KILLER_KEYWORDS:
+                if keyword in text:
+                    hits.append({
+                        'title': title,
+                        'keyword': keyword,
+                        'link': item.get("link", ""),
+                    })
+                    break
+                    
+    except requests.exceptions.RequestException as e:
+        logger.warning(f"[NEWS] Google CSE request failed for {company_name}: {e}")
     except Exception as e:
-        error_str = str(e)
-        if "Ratelimit" in error_str or "202" in error_str:
-            # レートリミット検出 → 30秒クールダウン後に再試行
-            logger.warning(f"[NEWS] Rate limit detected for {company_name}. Cooling down 30s...")
-            time.sleep(30)
-            try:
-                results = execute_search()
-            except Exception as retry_e:
-                logger.warning(f"[NEWS] Retry failed for {company_name}: {retry_e}")
-        else:
-            logger.warning(f"[NEWS] Search failed for {company_name}: {e}")
-    
-    # 結果からKiller Keywordsを検出
-    for result in results:
-        title = result.get('title', '')
-        body = result.get('body', '')
-        text = title + " " + body
-        
-        for keyword in KILLER_KEYWORDS:
-            if keyword in text:
-                hits.append({
-                    'title': title,
-                    'keyword': keyword,
-                    'date': result.get('date', ''),
-                })
-                break
-    
-    # Random Jitter: 5〜10秒のランダム待機（ボット判定回避）
-    sleep_time = random.uniform(5, 10)
-    logger.debug(f"[NEWS] Sleeping {sleep_time:.1f}s...")
-    time.sleep(sleep_time)
+        logger.warning(f"[NEWS] Search failed for {company_name}: {e}")
     
     return hits
 
@@ -149,7 +151,7 @@ def analyze_stock(
     
     # Phase 1: Event Filter（ニュース検索）
     logger.info(f"[NEWS] Analyzing {code} ({name})...")
-    news_hits = search_news(name, max_results=3)
+    news_hits = search_news_google(name, max_results=3)
     
     if news_hits:
         # ネガティブニュース検出 → REJECT
@@ -215,7 +217,13 @@ def batch_analyze(signals: list) -> list:
 
 if __name__ == "__main__":
     # テスト実行
-    print("Testing News Analyzer...")
+    print("Testing News Analyzer with Google CSE...")
+    
+    # 設定確認
+    if not GOOGLE_CSE_API_KEY or not GOOGLE_CSE_ID:
+        print("[ERROR] Google CSE API key or ID not configured.")
+        print("Please set GOOGLE_CSE_API_KEY and GOOGLE_CSE_ID in .env")
+        exit(1)
     
     # 日経平均の変動を取得
     nikkei_change = get_nikkei_change()
