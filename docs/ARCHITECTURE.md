@@ -105,7 +105,7 @@ sequenceDiagram
 | モジュール | 説明 | 出力先 |
 |-----------|------|--------|
 | `scan.py` | 市場環境判定+シグナル抽出 | コンソール |
-| `news_analyzer.py` | 暴落銘柄の悪材料検索+地合い比較 | scan.pyへ判定結果返却 |
+| `news_analyzer.py` | Google CSEでニュース検索+地合い比較 | scan.pyへ判定結果返却 |
 | `notifier.py` | シグナルをスプレッドシートに書き込み | Google Sheets |
 
 ### BigQuery連携系
@@ -160,6 +160,8 @@ graph TD
 ### 必要な環境変数 (.env)
 ```
 JQUANTS_API_KEY=your_api_key_here
+GOOGLE_CSE_API_KEY=your_google_cse_api_key
+GOOGLE_CSE_ID=your_search_engine_id
 ```
 
 ### 依存ライブラリ (requirements.txt)
@@ -172,13 +174,15 @@ gspread>=5.10.0
 google-auth>=2.20.0
 yfinance>=1.0
 pandas-gbq>=0.19.0
-duckduckgo_search>=8.0.0
+requests>=2.28.0
 ```
 
 ### GCP設定
 - **プロジェクトID:** nisa-jquant
 - **BigQueryデータセット:** stock_data
 - **テーブル:** prices, fundamentals
+- **Custom Search API:** 有効化済み（100回/日無料）
+- **Programmable Search Engine:** ウェブ全体を検索
 
 ---
 
