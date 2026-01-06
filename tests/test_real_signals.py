@@ -47,7 +47,7 @@ def main():
     
     # 3. シグナルデータを変換
     signals = []
-    for row in records[:10]:  # 最大10銘柄
+    for row in records[:20]:  # 20銘柄すべて
         code = str(row.get('銘柄コード', row.get('code', '')))
         name = str(row.get('銘柄名', row.get('name', '')))
         ma25_rate = row.get('MA25乖離率(%)', row.get('ma25_rate', 0))

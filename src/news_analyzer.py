@@ -62,46 +62,61 @@ def search_news(company_name: str, max_results: int = 3) -> list:
         ヒットしたニュースのリスト [{'title': str, 'keyword': str}, ...]
     """
     import time
+    import random
     
-    # シンプルなクエリ（レートリミット回避）
+    # シンプルなクエリ
     query = f"{company_name} 株価"
     
-    hits = []
-    try:
+    def execute_search():
+        """検索を実行する内部関数"""
         with DDGS() as ddgs:
-            # ニュース検索
-            results = list(ddgs.news(
+            return list(ddgs.news(
                 query,
                 region="jp-jp",
                 safesearch="off",
-                timelimit="w",  # 過去1週間
+                timelimit="d",  # 過去1日
                 max_results=max_results
             ))
-            
-            for result in results:
-                title = result.get('title', '')
-                body = result.get('body', '')
-                text = title + " " + body
-                
-                # タイトルまたは本文にKiller Keywordが含まれているか確認
-                for keyword in KILLER_KEYWORDS:
-                    if keyword in text:
-                        hits.append({
-                            'title': title,
-                            'keyword': keyword,
-                            'date': result.get('date', ''),
-                        })
-                        break
-        
-        # レートリミット回避のため待機（3秒）
-        time.sleep(3)
+    
+    hits = []
+    results = []
+    
+    try:
+        # 初回検索
+        results = execute_search()
         
     except Exception as e:
         error_str = str(e)
-        if "Ratelimit" in error_str:
-            logger.warning(f"[NEWS] Rate limited, skipping news search for {company_name}")
+        if "Ratelimit" in error_str or "202" in error_str:
+            # レートリミット検出 → 30秒クールダウン後に再試行
+            logger.warning(f"[NEWS] Rate limit detected for {company_name}. Cooling down 30s...")
+            time.sleep(30)
+            try:
+                results = execute_search()
+            except Exception as retry_e:
+                logger.warning(f"[NEWS] Retry failed for {company_name}: {retry_e}")
         else:
             logger.warning(f"[NEWS] Search failed for {company_name}: {e}")
+    
+    # 結果からKiller Keywordsを検出
+    for result in results:
+        title = result.get('title', '')
+        body = result.get('body', '')
+        text = title + " " + body
+        
+        for keyword in KILLER_KEYWORDS:
+            if keyword in text:
+                hits.append({
+                    'title': title,
+                    'keyword': keyword,
+                    'date': result.get('date', ''),
+                })
+                break
+    
+    # Random Jitter: 5〜10秒のランダム待機（ボット判定回避）
+    sleep_time = random.uniform(5, 10)
+    logger.debug(f"[NEWS] Sleeping {sleep_time:.1f}s...")
+    time.sleep(sleep_time)
     
     return hits
 
