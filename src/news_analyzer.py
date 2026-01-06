@@ -93,8 +93,8 @@ def search_news(company_name: str, max_results: int = 3) -> list:
                         })
                         break
         
-        # レートリミット回避のため待機
-        time.sleep(1)
+        # レートリミット回避のため待機（3秒）
+        time.sleep(3)
         
     except Exception as e:
         error_str = str(e)
