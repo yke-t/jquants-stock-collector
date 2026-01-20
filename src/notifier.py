@@ -20,7 +20,10 @@ SECRET_KEY_PATH = Path(__file__).parent.parent / "secret_key.json"
 # デフォルト設定（呼び出し元で上書き可能だが、基本はここを修正）
 # 注意: 共有設定したスプレッドシートのIDをここに設定してください
 SPREADSHEET_KEY = "1Hejm_UXA3xvn5rEXUhMkpHPtSjM2-foq-t1Su96gGYo"
-SHEET_NAME = "Signals"
+
+def get_sheet_name() -> str:
+    """日付入りのシート名を生成する（例: Signals_20260120）"""
+    return f"Signals_{datetime.now().strftime('%Y%m%d')}"
 
 # API Scopes
 SCOPES = [
@@ -71,12 +74,13 @@ def update_signal_sheet(signal_data: List[Dict[str, Any]], spreadsheet_key: str 
         # スプレッドシートを開く
         sh = client.open_by_key(spreadsheet_key)
         
-        # シートの取得または作成
+        # シートの取得または作成（日付入りシート名）
+        sheet_name = get_sheet_name()
         try:
-            worksheet = sh.worksheet(SHEET_NAME)
+            worksheet = sh.worksheet(sheet_name)
         except gspread.WorksheetNotFound:
-            logger.info(f"[NOTIFIER] Sheet '{SHEET_NAME}' not found. Creating new sheet...")
-            worksheet = sh.add_worksheet(title=SHEET_NAME, rows=100, cols=10)
+            logger.info(f"[NOTIFIER] Sheet '{sheet_name}' not found. Creating new sheet...")
+            worksheet = sh.add_worksheet(title=sheet_name, rows=100, cols=10)
 
         # ヘッダー定義（判定結果を追加）
         header = ['更新日時', '銘柄コード', '銘柄名', '現在値', 'MA25乖離率(%)', '損切りライン', '利確目標(MA25)', '判定結果', '判定理由', 'News Hit']
