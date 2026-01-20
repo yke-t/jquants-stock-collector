@@ -211,6 +211,17 @@ def analyze_market():
                 print("[NOTIFIER] Run: pip install gspread google-auth")
             except Exception as e:
                 print(f"[NOTIFIER] ERROR: Unexpected error during notification: {e}")
+            
+            # DB保存（評価機能用）
+            try:
+                from src.database import StockDatabase
+                db = StockDatabase()
+                signal_date = latest_date.strftime('%Y-%m-%d')
+                saved_count = db.save_signals(formatted_signals, signal_date)
+                print(f"[DB] Saved {saved_count} signals to database.")
+            except Exception as e:
+                print(f"[DB] ERROR: Failed to save signals: {e}")
+                
         else:
             print("\n[NOTIFIER] No signals to report. Skipping Sheet update.")
 

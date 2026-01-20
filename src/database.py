@@ -81,6 +81,25 @@ class StockDatabase:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_prices_date ON prices(date)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_prices_code ON prices(code)")
         
+        # シグナル履歴テーブル（評価機能用）
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS signals (
+                signal_date TEXT,
+                code TEXT,
+                name TEXT,
+                signal_price REAL,
+                ma25_rate REAL,
+                stop_loss REAL,
+                take_profit REAL,
+                verdict TEXT,
+                reason TEXT,
+                news_hit TEXT,
+                PRIMARY KEY (signal_date, code)
+            )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_signals_date ON signals(signal_date)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_signals_verdict ON signals(verdict)")
+        
         conn.commit()
         conn.close()
 
@@ -150,3 +169,84 @@ class StockDatabase:
         count = cursor.fetchone()[0]
         conn.close()
         return count
+
+    def save_signals(self, signal_list, signal_date):
+        """
+        シグナルリストをDBに保存（UPSERT）
+        
+        Args:
+            signal_list: シグナル辞書のリスト
+            signal_date: シグナル発生日（YYYY-MM-DD形式）
+        
+        Returns:
+            int: 保存したレコード数
+        """
+        if not signal_list:
+            return 0
+        
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        saved = 0
+        for sig in signal_list:
+            try:
+                cursor.execute("""
+                    INSERT OR REPLACE INTO signals 
+                    (signal_date, code, name, signal_price, ma25_rate, stop_loss, take_profit, verdict, reason, news_hit)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    signal_date,
+                    str(sig.get('code', '')),
+                    str(sig.get('name', '')),
+                    sig.get('current_price', 0),
+                    sig.get('ma25_rate', 0.0),
+                    sig.get('stop_loss', 0),
+                    sig.get('take_profit', 0),
+                    str(sig.get('verdict', 'N/A')),
+                    str(sig.get('reason', '')),
+                    str(sig.get('news_hit', '') or '')
+                ))
+                saved += 1
+            except Exception as e:
+                print(f"[DB] Error saving signal {sig.get('code')}: {e}")
+        
+        conn.commit()
+        conn.close()
+        return saved
+
+    def get_signals(self, start_date=None, end_date=None, verdict=None):
+        """
+        シグナル履歴を取得
+        
+        Args:
+            start_date: 開始日（YYYY-MM-DD）
+            end_date: 終了日（YYYY-MM-DD）
+            verdict: フィルタする判定結果（ENTRY/WATCH/REJECT）
+        
+        Returns:
+            list: シグナル辞書のリスト
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        query = "SELECT * FROM signals WHERE 1=1"
+        params = []
+        
+        if start_date:
+            query += " AND signal_date >= ?"
+            params.append(start_date)
+        if end_date:
+            query += " AND signal_date <= ?"
+            params.append(end_date)
+        if verdict:
+            query += " AND verdict = ?"
+            params.append(verdict)
+        
+        query += " ORDER BY signal_date DESC, code ASC"
+        
+        cursor.execute(query, params)
+        columns = [desc[0] for desc in cursor.description]
+        rows = cursor.fetchall()
+        conn.close()
+        
+        return [dict(zip(columns, row)) for row in rows]

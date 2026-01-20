@@ -115,6 +115,25 @@ sequenceDiagram
 | `export_bigquery.py` | 全量エクスポート | SQLite → BigQuery (REPLACE) |
 | `sync_bigquery.py` | 差分同期（日次） | 前日分のみ MERGE |
 
+### 評価・分析系
+
+| モジュール | 説明 | 出力 |
+|-----------|------|------|
+| `evaluate.py` | シグナル判定の事後評価 | コンソールレポート + PNGチャート |
+| `backtest.py` | WFAバックテスト | KPI評価 |
+
+**評価機能の使い方:**
+```bash
+# 月次レポート生成
+python -m src.evaluate --month 2026-01
+
+# チャート付きレポート
+python -m src.evaluate --month 2026-01 --charts
+
+# Google Sheetsから過去シグナルをインポート
+python -m src.evaluate --import-sheets
+```
+
 ---
 
 ## Phase 5: 暴落銘柄自動調査
