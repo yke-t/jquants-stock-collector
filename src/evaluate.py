@@ -321,8 +321,9 @@ def plot_signal_charts(results_df: pd.DataFrame, output_dir: Path = CHARTS_OUTPU
         
         plt.tight_layout()
         
-        # 保存
-        filename = f"{sig['signal_date']}_{code}_{verdict}.png"
+        # 保存（ファイル名の不正文字をサニタイズ）
+        safe_verdict = verdict.replace('/', '_').replace('\\', '_').replace(':', '_')
+        filename = f"{sig['signal_date']}_{code}_{safe_verdict}.png"
         filepath = output_dir / filename
         plt.savefig(filepath, dpi=100)
         plt.close()

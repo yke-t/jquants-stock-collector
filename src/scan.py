@@ -23,6 +23,20 @@ SCALECAT_TARGETS = ['TOPIX Small 1', 'TOPIX Small 2', 'TOPIX Mid400']
 ENABLE_SHEETS_NOTIFICATION = True
 
 
+def calculate_rsi(series, period=14):
+    """RSI (Relative Strength Index) を計算"""
+    delta = series.diff()
+    gain = (delta.where(delta > 0, 0)).fillna(0)
+    loss = (-delta.where(delta < 0, 0)).fillna(0)
+    
+    avg_gain = gain.rolling(window=period).mean()
+    avg_loss = loss.rolling(window=period).mean()
+    
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
+
+
 def analyze_market():
     print("="*60)
     print(f"Snow Money Signal Scanner - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
@@ -79,6 +93,9 @@ def analyze_market():
     df['ma_short'] = df.groupby('code')['close'].transform(lambda x: x.rolling(25).mean())
     df['ma_long'] = df.groupby('code')['close'].transform(lambda x: x.rolling(75).mean())
     
+    # RSI計算
+    df['rsi'] = df.groupby('code')['close'].transform(lambda x: calculate_rsi(x))
+    
     # トレンド判定
     df['is_bullish'] = df['close'] > df['ma_long']
     df['gc_trend'] = df['ma_short'] > df['ma_long']
@@ -134,13 +151,16 @@ def analyze_market():
     candidates = candidates.sort_values('dip_ratio')
     
     print(f"Found {len(candidates)} candidates:")
-    print("-" * 60)
-    print(f"{'Code':<8} {'Close':>12} {'MA25':>12} {'Dip':>10}")
-    print("-" * 60)
+    print("-" * 70)
+    print(f"{'Code':<8} {'Close':>12} {'MA25':>12} {'Dip':>10} {'RSI':>8}")
+    print("-" * 70)
     
     for _, row in candidates.head(20).iterrows():
         dip_pct = (row['dip_ratio'] - 1) * 100
-        print(f"{row['code']:<8} {row['close']:>12,.0f} {row['ma_short']:>12,.0f} {dip_pct:>9.1f}%")
+        rsi_val = row.get('rsi', 50.0)
+        if pd.isna(rsi_val):
+            rsi_val = 50.0
+        print(f"{row['code']:<8} {row['close']:>12,.0f} {row['ma_short']:>12,.0f} {dip_pct:>9.1f}% {rsi_val:>7.1f}")
         
     print(f"{'='*60}")
     
@@ -149,6 +169,9 @@ def analyze_market():
         # データ変換 (DataFrame -> List[Dict])
         formatted_signals = []
         for _, row in candidates.head(20).iterrows():
+            rsi_val = row.get('rsi', 50.0)
+            if pd.isna(rsi_val):
+                rsi_val = 50.0
             formatted_signals.append({
                 'code': str(row['code']),
                 'name': str(row.get('company_name', '')),
@@ -156,7 +179,8 @@ def analyze_market():
                 'ma25_rate': round((row['dip_ratio'] - 1) * 100, 2),
                 'stop_loss': int(row['close'] * (1 - STOP_LOSS_PCT)),
                 'take_profit': int(row['ma_short']),  # 利確目標（MA25）
-                'dip_pct': round((row['dip_ratio'] - 1) * 100, 2)  # news_analyzer用
+                'dip_pct': round((row['dip_ratio'] - 1) * 100, 2),  # news_analyzer用
+                'rsi': round(rsi_val, 1)  # RSI追加
             })
 
         # --- ニュース分析を実行 ---
