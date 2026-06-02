@@ -5,16 +5,20 @@ stock_data.dbの直近データをBigQueryに差分同期する。
 全データを上書きするのではなく、直近N日分のみ追加/更新する。
 """
 import sqlite3
+import os
 import pandas as pd
 from google.cloud import bigquery
 from pathlib import Path
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # --- Config ---
 DB_PATH = Path(__file__).parent.parent / "stock_data.db"
-GCP_PROJECT_ID = "nisa-jquant"
-BQ_DATASET = "stock_data"
-BQ_TABLE_PRICES = "prices"
+GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "nisa-jquant")
+BQ_DATASET = os.getenv("BQ_DATASET", "stock_data")
+BQ_TABLE_PRICES = os.getenv("BQ_TABLE_PRICES", "prices")
 SYNC_DAYS = 1  # 直近1日分を同期（前日分）
 
 

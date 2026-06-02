@@ -11,18 +11,22 @@ stock_data.dbのデータをBigQueryにエクスポートするためのスク�
 - GCPプロジェクトでBigQuery APIを有効化
 """
 import sqlite3
+import os
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # --- Config ---
 DB_PATH = Path(__file__).parent.parent / "stock_data.db"
 
 # BigQuery設定（ユーザーが設定）
-GCP_PROJECT_ID = "nisa-jquant"  # GCPプロジェクトID
-BQ_DATASET = "stock_data"           # データセット名
-BQ_TABLE_PRICES = "prices"          # 株価テーブル
-BQ_TABLE_FUNDAMENTALS = "fundamentals"  # 銘柄マスタテーブル
+GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "nisa-jquant")  # GCPプロジェクトID
+BQ_DATASET = os.getenv("BQ_DATASET", "stock_data")           # データセット名
+BQ_TABLE_PRICES = os.getenv("BQ_TABLE_PRICES", "prices")          # 株価テーブル
+BQ_TABLE_FUNDAMENTALS = os.getenv("BQ_TABLE_FUNDAMENTALS", "fundamentals")  # 銘柄マスタテーブル
 
 
 def export_to_csv():
