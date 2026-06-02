@@ -57,6 +57,10 @@ def sync_to_bigquery(df: pd.DataFrame) -> int:
     # 一時テーブルにアップロード
     temp_table_id = f"{GCP_PROJECT_ID}.{BQ_DATASET}._temp_prices_sync"
     
+    # yfinanceデータの場合、turnover/adjustment系カラムが全てNullなのでdrop
+    # BigQueryにSTRING型として渡されるのを防止
+    df = df.dropna(axis=1, how='all')
+    
     job_config = bigquery.LoadJobConfig(
         write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
     )
@@ -65,32 +69,35 @@ def sync_to_bigquery(df: pd.DataFrame) -> int:
     job.result()  # 完了を待つ
     
     # MERGEクエリで差分更新
+    # yfinanceデータには基本カラムのみ存在するため、動的に構築
+    base_cols = ["open", "high", "low", "close", "volume"]
+    optional_cols = ["turnover", "adjustmentfactor", "adjustmentopen",
+                     "adjustmenthigh", "adjustmentlow", "adjustmentclose",
+                     "adjustmentvolume"]
+    
+    # DataFrameに存在するカラムのみ使用
+    expected_cols = base_cols + optional_cols
+    sync_cols = [c for c in expected_cols if c in df.columns]
+    if not sync_cols:
+        print("[WARN] All data columns are null. Skipping MERGE.")
+        client.delete_table(temp_table_id, not_found_ok=True)
+        return 0
+    
+    update_clause = ",\n            ".join([f"{c} = source.{c}" for c in sync_cols])
+    all_insert_cols = ["date", "code"] + sync_cols
+    insert_cols = ", ".join(all_insert_cols)
+    insert_vals = ", ".join([f"source.{c}" for c in all_insert_cols])
+    
     merge_query = f"""
     MERGE `{table_id}` AS target
     USING `{temp_table_id}` AS source
     ON target.date = source.date AND target.code = source.code
     WHEN MATCHED THEN
         UPDATE SET
-            open = source.open,
-            high = source.high,
-            low = source.low,
-            close = source.close,
-            volume = source.volume,
-            turnover = source.turnover,
-            adjustmentfactor = source.adjustmentfactor,
-            adjustmentopen = source.adjustmentopen,
-            adjustmenthigh = source.adjustmenthigh,
-            adjustmentlow = source.adjustmentlow,
-            adjustmentclose = source.adjustmentclose,
-            adjustmentvolume = source.adjustmentvolume
+            {update_clause}
     WHEN NOT MATCHED THEN
-        INSERT (date, code, open, high, low, close, volume, turnover,
-                adjustmentfactor, adjustmentopen, adjustmenthigh, 
-                adjustmentlow, adjustmentclose, adjustmentvolume)
-        VALUES (source.date, source.code, source.open, source.high, 
-                source.low, source.close, source.volume, source.turnover,
-                source.adjustmentfactor, source.adjustmentopen, source.adjustmenthigh,
-                source.adjustmentlow, source.adjustmentclose, source.adjustmentvolume)
+        INSERT ({insert_cols})
+        VALUES ({insert_vals})
     """
     
     query_job = client.query(merge_query)
