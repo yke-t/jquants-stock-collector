@@ -93,6 +93,14 @@ class EvaluateTest(unittest.TestCase):
         self.assertEqual(evaluate.classify_market_bucket(0.70), 'bullish')
         self.assertEqual(evaluate.classify_market_bucket(float('nan')), 'unknown')
 
+    def test_classify_ma25_bucket(self):
+        self.assertEqual(evaluate.classify_ma25_bucket(-8.0), '<=-8')
+        self.assertEqual(evaluate.classify_ma25_bucket(-6.0), '-8..-5')
+        self.assertEqual(evaluate.classify_ma25_bucket('-4.0'), '-5..-3')
+        self.assertEqual(evaluate.classify_ma25_bucket(-1.0), '-3..0')
+        self.assertEqual(evaluate.classify_ma25_bucket(0.0), '>=0')
+        self.assertEqual(evaluate.classify_ma25_bucket(float('nan')), 'unknown')
+
     def test_calculate_performance_includes_market_sentiment(self):
         signals = pd.DataFrame([{
             'signal_date': '2026-01-05',
@@ -120,8 +128,9 @@ class EvaluateTest(unittest.TestCase):
 
         self.assertAlmostEqual(result['market_sentiment'], 0.55)
         self.assertEqual(result['market_bucket'], 'bullish')
+        self.assertEqual(result['ma25_rate_num'], -4.0)
+        self.assertEqual(result['ma25_bucket'], '-5..-3')
 
 
 if __name__ == '__main__':
     unittest.main()
-

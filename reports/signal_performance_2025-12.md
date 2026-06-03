@@ -54,6 +54,9 @@
 ## Market Bucket x Verdict Summary
 _No data_
 
+## Market Bucket x MA25 Bucket x Verdict Summary
+_No data_
+
 ## Best 10
 | signal_date | code | name | verdict | return_pct | max_gain | max_loss | reason |
 | --- | --- | --- | --- | --- | --- | --- | --- |

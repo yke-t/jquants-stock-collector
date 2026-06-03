@@ -49,6 +49,19 @@ _No data_
 | bullish | WATCH | 13 | 1.78 | 3.12 | 61.54 | 46.15 | 46.15 |
 | bullish | REJECT | 76 | 8.46 | 4.04 | 60.53 | 53.95 | 56.58 |
 
+## Market Bucket x MA25 Bucket x Verdict Summary
+| market_bucket | ma25_bucket | verdict | count | avg_ma25_rate_pct | avg_return_pct | median_return_pct | win_rate_pct | stop_hit_pct | take_hit_pct |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| bullish | <=-8 | ENTRY | 1 | -8.25 | 0.61 | 0.61 | 100.00 | 0.00 | 0.00 |
+| bullish | <=-8 | WATCH | 3 | -8.62 | 6.98 | 6.30 | 100.00 | 33.33 | 66.67 |
+| bullish | <=-8 | REJECT | 9 | -19.64 | 33.29 | 6.79 | 77.78 | 88.89 | 44.44 |
+| bullish | -8..-5 | ENTRY | 5 | -6.61 | 11.95 | 5.92 | 60.00 | 40.00 | 60.00 |
+| bullish | -8..-5 | WATCH | 5 | -6.06 | 2.86 | 3.12 | 60.00 | 60.00 | 40.00 |
+| bullish | -8..-5 | REJECT | 35 | -6.12 | 5.92 | 5.00 | 65.71 | 37.14 | 65.71 |
+| bullish | -5..-3 | ENTRY | 5 | -4.33 | 8.28 | 5.49 | 80.00 | 40.00 | 80.00 |
+| bullish | -5..-3 | WATCH | 5 | -3.97 | -2.42 | -0.66 | 40.00 | 40.00 | 40.00 |
+| bullish | -5..-3 | REJECT | 32 | -4.28 | 4.26 | -0.03 | 50.00 | 62.50 | 50.00 |
+
 ## Best 10
 | signal_date | code | name | verdict | return_pct | max_gain | max_loss | reason |
 | --- | --- | --- | --- | --- | --- | --- | --- |

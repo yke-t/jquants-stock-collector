@@ -37,6 +37,20 @@ MARKET_BUCKET_BEARISH = 'bearish'
 MARKET_BUCKET_NEUTRAL = 'neutral'
 MARKET_BUCKET_BULLISH = 'bullish'
 
+# MA25乖離率バケット定義
+MA25_BUCKET_DEEP_DROP = '<=-8'
+MA25_BUCKET_DROP = '-8..-5'
+MA25_BUCKET_MODERATE_DROP = '-5..-3'
+MA25_BUCKET_SHALLOW_DROP = '-3..0'
+MA25_BUCKET_ABOVE = '>=0'
+MA25_BUCKETS = [
+    MA25_BUCKET_DEEP_DROP,
+    MA25_BUCKET_DROP,
+    MA25_BUCKET_MODERATE_DROP,
+    MA25_BUCKET_SHALLOW_DROP,
+    MA25_BUCKET_ABOVE,
+]
+
 
 def coerce_numeric(value):
     """カンマや空文字を含む値を安全に数値化する"""
@@ -188,10 +202,27 @@ def classify_market_bucket(sentiment: float) -> str:
         return MARKET_BUCKET_BULLISH
 
 
+def classify_ma25_bucket(ma25_rate) -> str:
+    """MA25乖離率をチューニング用バケットに分類する"""
+    rate = coerce_numeric(ma25_rate)
+    if pd.isna(rate):
+        return 'unknown'
+    if rate <= -8:
+        return MA25_BUCKET_DEEP_DROP
+    if rate <= -5:
+        return MA25_BUCKET_DROP
+    if rate <= -3:
+        return MA25_BUCKET_MODERATE_DROP
+    if rate < 0:
+        return MA25_BUCKET_SHALLOW_DROP
+    return MA25_BUCKET_ABOVE
+
+
 def build_unevaluated_result(sig, eval_observations=0, next_open=np.nan, market_sentiment=np.nan):
     """評価不能または未成熟なシグナルの結果行を作る"""
     signal_price_num = coerce_numeric(sig.get('signal_price', np.nan))
     signal_price_ratio = signal_price_num / next_open if pd.notna(signal_price_num) and pd.notna(next_open) and next_open > 0 else np.nan
+    ma25_rate_num = coerce_numeric(sig.get('ma25_rate', np.nan))
     return {
         **sig.to_dict(),
         'entry_price': np.nan,
@@ -210,6 +241,8 @@ def build_unevaluated_result(sig, eval_observations=0, next_open=np.nan, market_
         'take_profit_hit': np.nan,
         'market_sentiment': market_sentiment,
         'market_bucket': classify_market_bucket(market_sentiment),
+        'ma25_rate_num': ma25_rate_num,
+        'ma25_bucket': classify_ma25_bucket(ma25_rate_num),
     }
 
 
@@ -340,6 +373,7 @@ def calculate_performance(signals_df: pd.DataFrame, eval_days: int = EVAL_DAYS) 
         signal_price_sane = is_sane_signal_price(signal_price_num, next_open)
         stop_loss = coerce_numeric(sig.get('stop_loss', np.nan))
         take_profit = coerce_numeric(sig.get('take_profit', np.nan))
+        ma25_rate_num = coerce_numeric(sig.get('ma25_rate', np.nan))
         
         # N日後の終値でリターン計算
         eval_price = future_prices.iloc[-1]['close']
@@ -371,6 +405,8 @@ def calculate_performance(signals_df: pd.DataFrame, eval_days: int = EVAL_DAYS) 
             'take_profit_hit': take_profit_hit,
             'market_sentiment': ms,
             'market_bucket': classify_market_bucket(ms),
+            'ma25_rate_num': ma25_rate_num,
+            'ma25_bucket': classify_ma25_bucket(ma25_rate_num),
         })
     
     return pd.DataFrame(results)
@@ -473,6 +509,28 @@ def generate_report(year_month: str, eval_days: int = EVAL_DAYS):
                 wr = (bucket_df['return_pct'] > 0).mean() * 100
                 sl = bucket_df['stop_loss_hit'].mean() * 100
                 print(f"  {bucket}: {len(bucket_df)}件, 平均{avg_r:+.2f}%, 勝率{wr:.1f}%, 損切り{sl:.1f}%")
+        else:
+            print("  ENTRY判定なし")
+
+    # 市場環境 x MA25乖離バケット別 ENTRY 集計
+    if {'market_bucket', 'ma25_bucket'}.issubset(completed_df.columns):
+        print(f"\n{'='*60}")
+        print("■ 市場環境 x MA25乖離別ENTRY成績")
+        print("-" * 40)
+        entry_complete = completed_df[completed_df['verdict'] == 'ENTRY']
+        if not entry_complete.empty:
+            for bucket in [MARKET_BUCKET_BEARISH, MARKET_BUCKET_NEUTRAL, MARKET_BUCKET_BULLISH]:
+                for ma25_bucket in MA25_BUCKETS:
+                    cross_df = entry_complete[
+                        (entry_complete['market_bucket'] == bucket)
+                        & (entry_complete['ma25_bucket'] == ma25_bucket)
+                    ]
+                    if cross_df.empty:
+                        continue
+                    avg_r = cross_df['return_pct'].mean()
+                    wr = (cross_df['return_pct'] > 0).mean() * 100
+                    sl = cross_df['stop_loss_hit'].mean() * 100
+                    print(f"  {bucket} x {ma25_bucket}: {len(cross_df)}件, 平均{avg_r:+.2f}%, 勝率{wr:.1f}%, 損切り{sl:.1f}%")
         else:
             print("  ENTRY判定なし")
     
@@ -615,6 +673,37 @@ def write_markdown_report(year_month: str, results_df: pd.DataFrame, eval_days: 
             dataframe_to_markdown(bucket_verdict),
             "",
         ])
+
+        if 'ma25_bucket' in completed_df.columns:
+            bucket_ma25_verdict = pd.DataFrame()
+            for bucket in [MARKET_BUCKET_BEARISH, MARKET_BUCKET_NEUTRAL, MARKET_BUCKET_BULLISH]:
+                for ma25_bucket in MA25_BUCKETS:
+                    for verdict in ['ENTRY', 'WATCH', 'REJECT']:
+                        subset = completed_df[
+                            (completed_df['market_bucket'] == bucket)
+                            & (completed_df['ma25_bucket'] == ma25_bucket)
+                            & (completed_df['verdict'] == verdict)
+                        ]
+                        if subset.empty:
+                            continue
+                        bucket_ma25_verdict = pd.concat([bucket_ma25_verdict, pd.DataFrame([{
+                            'market_bucket': bucket,
+                            'ma25_bucket': ma25_bucket,
+                            'verdict': verdict,
+                            'count': len(subset),
+                            'avg_ma25_rate_pct': subset['ma25_rate_num'].mean(),
+                            'avg_return_pct': subset['return_pct'].mean(),
+                            'median_return_pct': subset['return_pct'].median(),
+                            'win_rate_pct': (subset['return_pct'] > 0).mean() * 100,
+                            'stop_hit_pct': subset['stop_loss_hit'].mean() * 100,
+                            'take_hit_pct': subset['take_profit_hit'].mean() * 100,
+                        }])], ignore_index=True)
+
+            lines.extend([
+                "## Market Bucket x MA25 Bucket x Verdict Summary",
+                dataframe_to_markdown(bucket_ma25_verdict),
+                "",
+            ])
 
     lines.extend([
         "## Best 10",
