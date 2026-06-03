@@ -424,6 +424,7 @@ def import_from_sheets():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Signal Evaluation Tool")
     parser.add_argument("--month", type=str, help="Target month (YYYY-MM)")
+    parser.add_argument("--prev-month", action="store_true", help="Evaluate previous month")
     parser.add_argument("--charts", action="store_true", help="Generate charts")
     parser.add_argument("--import-sheets", action="store_true", help="Import from Google Sheets")
     parser.add_argument("--days", type=int, default=EVAL_DAYS, help=f"Evaluation days (default: {EVAL_DAYS})")
@@ -434,6 +435,15 @@ if __name__ == "__main__":
         import_from_sheets()
     elif args.month:
         results = generate_report(args.month, args.days)
+        if args.charts and results is not None:
+            plot_signal_charts(results)
+    elif args.prev_month:
+        # 先月を評価（毎月1日のバッチ実行用）
+        today = datetime.now()
+        first_of_this_month = today.replace(day=1)
+        prev_month = (first_of_this_month - timedelta(days=1)).strftime('%Y-%m')
+        print(f"[INFO] Target: Previous month ({prev_month})")
+        results = generate_report(prev_month, args.days)
         if args.charts and results is not None:
             plot_signal_charts(results)
     else:
