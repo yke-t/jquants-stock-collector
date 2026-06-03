@@ -9,11 +9,15 @@ Usage:
     python -m src.evaluate --month 2026-01 --charts
 """
 import sqlite3
+import os
 import pandas as pd
 import numpy as np
 from pathlib import Path
 from datetime import datetime, timedelta
 import argparse
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # --- Config ---
 DB_PATH = Path(__file__).parent.parent / "stock_data.db"
@@ -344,8 +348,12 @@ def import_from_sheets():
         print("[ERROR] gspread not installed. Run: pip install gspread google-auth")
         return
     
-    SECRET_KEY_PATH = Path(__file__).parent.parent / "secret_key.json"
-    SPREADSHEET_KEY = "1Hejm_UXA3xvn5rEXUhMkpHPtSjM2-foq-t1Su96gGYo"
+    default_secret_key_path = Path(__file__).parent.parent / "secret_key.json"
+    SECRET_KEY_PATH = Path(os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", str(default_secret_key_path)))
+    SPREADSHEET_KEY = os.getenv(
+        "GOOGLE_SHEETS_SPREADSHEET_KEY",
+        "1Hejm_UXA3xvn5rEXUhMkpHPtSjM2-foq-t1Su96gGYo",
+    )
     
     SCOPES = [
         'https://www.googleapis.com/auth/spreadsheets.readonly',

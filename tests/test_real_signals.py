@@ -3,17 +3,25 @@
 Read signals from Google Sheets and test news_analyzer
 """
 import sys
+import os
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.stdout.reconfigure(encoding='utf-8')
 
 import gspread
 from google.oauth2.service_account import Credentials
+from dotenv import load_dotenv
 from src.news_analyzer import batch_analyze, get_nikkei_change
 
+load_dotenv()
+
 # --- Config ---
-SECRET_KEY_PATH = Path(__file__).parent.parent / "secret_key.json"
-SPREADSHEET_KEY = "1Hejm_UXA3xvn5rEXUhMkpHPtSjM2-foq-t1Su96gGYo"
+DEFAULT_SECRET_KEY_PATH = Path(__file__).parent.parent / "secret_key.json"
+SECRET_KEY_PATH = Path(os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", str(DEFAULT_SECRET_KEY_PATH)))
+SPREADSHEET_KEY = os.getenv(
+    "GOOGLE_SHEETS_SPREADSHEET_KEY",
+    "1Hejm_UXA3xvn5rEXUhMkpHPtSjM2-foq-t1Su96gGYo",
+)
 SHEET_NAME = "Signals_20260105"
 
 SCOPES = [
