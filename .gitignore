@@ -47,6 +47,9 @@ env/
 # Logs
 *.log
 
+# Generated evaluation charts
+charts/*.png
+
 # OS files
 .DS_Store
 Thumbs.db
