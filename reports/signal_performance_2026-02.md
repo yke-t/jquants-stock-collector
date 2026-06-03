@@ -29,6 +29,29 @@
 ## Invalid signal_price Sample
 _No data_
 
+## Market Sentiment by Date
+| signal_date | market_sentiment | market_bucket |
+| --- | --- | --- |
+| 2026-02-10 | 0.79 | bullish |
+| 2026-02-12 | 0.80 | bullish |
+| 2026-02-13 | 0.76 | bullish |
+| 2026-02-16 | 0.75 | bullish |
+| 2026-02-17 | 0.74 | bullish |
+| 2026-02-18 | 0.76 | bullish |
+| 2026-02-19 | 0.76 | bullish |
+| 2026-02-20 | 0.73 | bullish |
+| 2026-02-24 | 0.74 | bullish |
+| 2026-02-25 | 0.75 | bullish |
+| 2026-02-26 | 0.75 | bullish |
+| 2026-02-27 | 0.80 | bullish |
+
+## Market Bucket x Verdict Summary
+| market_bucket | verdict | count | avg_return_pct | median_return_pct | win_rate_pct | stop_hit_pct | take_hit_pct |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| bullish | ENTRY | 14 | -3.04 | -0.82 | 50.00 | 71.43 | 14.29 |
+| bullish | WATCH | 41 | -0.34 | -1.72 | 41.46 | 63.41 | 26.83 |
+| bullish | REJECT | 185 | -3.76 | -4.52 | 35.14 | 70.81 | 18.92 |
+
 ## Best 10
 | signal_date | code | name | verdict | return_pct | max_gain | max_loss | reason |
 | --- | --- | --- | --- | --- | --- | --- | --- |

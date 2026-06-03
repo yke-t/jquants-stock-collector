@@ -34,6 +34,37 @@
 | 2026-03-25 | 40220 | ラサ工業 | REJECT | 8240.00 | 1634.17 | 5.04 |
 | 2026-03-26 | 40220 | ラサ工業 | REJECT | 8030.00 | 1555.22 | 5.16 |
 
+## Market Sentiment by Date
+| signal_date | market_sentiment | market_bucket |
+| --- | --- | --- |
+| 2026-03-02 | 0.76 | bullish |
+| 2026-03-03 | 0.67 | bullish |
+| 2026-03-04 | 0.53 | bullish |
+| 2026-03-05 | 0.62 | bullish |
+| 2026-03-06 | 0.62 | bullish |
+| 2026-03-09 | 0.50 | neutral |
+| 2026-03-11 | 0.60 | bullish |
+| 2026-03-12 | 0.50 | bullish |
+| 2026-03-13 | 0.46 | neutral |
+| 2026-03-17 | 0.48 | neutral |
+| 2026-03-18 | 0.59 | bullish |
+| 2026-03-19 | 0.43 | neutral |
+| 2026-03-25 | 0.39 | bearish |
+| 2026-03-26 | 0.38 | bearish |
+| 2026-03-27 | 0.39 | bearish |
+
+## Market Bucket x Verdict Summary
+| market_bucket | verdict | count | avg_return_pct | median_return_pct | win_rate_pct | stop_hit_pct | take_hit_pct |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| bearish | WATCH | 13 | 6.84 | 6.06 | 69.23 | 100.00 | 7.69 |
+| bearish | REJECT | 47 | 12.14 | 6.70 | 72.34 | 95.74 | 14.89 |
+| neutral | ENTRY | 5 | 6.06 | 7.69 | 60.00 | 60.00 | 0.00 |
+| neutral | WATCH | 13 | 4.14 | 0.74 | 53.85 | 76.92 | 30.77 |
+| neutral | REJECT | 62 | 4.52 | 4.65 | 62.90 | 88.71 | 12.90 |
+| bullish | ENTRY | 21 | 0.54 | -1.72 | 47.62 | 80.95 | 4.76 |
+| bullish | WATCH | 6 | -2.37 | -2.19 | 50.00 | 100.00 | 16.67 |
+| bullish | REJECT | 133 | -0.60 | -1.40 | 44.36 | 87.22 | 10.53 |
+
 ## Best 10
 | signal_date | code | name | verdict | return_pct | max_gain | max_loss | reason |
 | --- | --- | --- | --- | --- | --- | --- | --- |

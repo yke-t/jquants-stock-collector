@@ -46,6 +46,14 @@
 | 2025-12-25 | 82270,しまむら,10020,-8.19,9519,10914 |  | N/A |  |  |  |
 | 2025-12-25 | 97660,コナミグループ,21455,-4.97,20382,22577 |  | N/A |  |  |  |
 
+## Market Sentiment by Date
+| signal_date | market_sentiment | market_bucket |
+| --- | --- | --- |
+| 2025-12-26 | 0.70 | bullish |
+
+## Market Bucket x Verdict Summary
+_No data_
+
 ## Best 10
 | signal_date | code | name | verdict | return_pct | max_gain | max_loss | reason |
 | --- | --- | --- | --- | --- | --- | --- | --- |

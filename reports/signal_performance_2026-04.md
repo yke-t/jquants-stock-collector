@@ -29,6 +29,24 @@
 ## Invalid signal_price Sample
 _No data_
 
+## Market Sentiment by Date
+| signal_date | market_sentiment | market_bucket |
+| --- | --- | --- |
+| 2026-04-01 | 0.44 | neutral |
+| 2026-04-03 | 0.42 | neutral |
+| 2026-04-06 | 0.43 | neutral |
+| 2026-04-07 | 0.46 | neutral |
+| 2026-04-08 | 0.55 | bullish |
+
+## Market Bucket x Verdict Summary
+| market_bucket | verdict | count | avg_return_pct | median_return_pct | win_rate_pct | stop_hit_pct | take_hit_pct |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| neutral | ENTRY | 2 | 6.09 | 6.09 | 50.00 | 50.00 | 50.00 |
+| neutral | WATCH | 9 | 12.91 | 16.68 | 66.67 | 44.44 | 77.78 |
+| neutral | REJECT | 69 | 11.62 | 1.33 | 57.97 | 44.93 | 43.48 |
+| bullish | WATCH | 2 | -12.26 | -12.26 | 0.00 | 100.00 | 0.00 |
+| bullish | REJECT | 18 | 1.94 | -6.38 | 33.33 | 83.33 | 38.89 |
+
 ## Best 10
 | signal_date | code | name | verdict | return_pct | max_gain | max_loss | reason |
 | --- | --- | --- | --- | --- | --- | --- | --- |

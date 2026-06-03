@@ -27,6 +27,16 @@ EVAL_DAYS = 20  # シグナル後N営業日で評価
 SIGNAL_PRICE_MIN_RATIO = 0.2
 SIGNAL_PRICE_MAX_RATIO = 5.0
 
+# 市場環境フィルター設定（scan.pyと同一定義）
+MARKET_BULLISH_THRESHOLD = 0.40
+SCALECAT_TARGETS = ['TOPIX Small 1', 'TOPIX Small 2', 'TOPIX Mid400']
+MARKET_MA_PERIOD = 75  # MA75
+
+# 市場環境バケット定義
+MARKET_BUCKET_BEARISH = 'bearish'
+MARKET_BUCKET_NEUTRAL = 'neutral'
+MARKET_BUCKET_BULLISH = 'bullish'
+
 
 def coerce_numeric(value):
     """カンマや空文字を含む値を安全に数値化する"""
@@ -47,7 +57,138 @@ def is_sane_signal_price(signal_price, next_open) -> bool:
     return SIGNAL_PRICE_MIN_RATIO <= ratio <= SIGNAL_PRICE_MAX_RATIO
 
 
-def build_unevaluated_result(sig, eval_observations=0, next_open=np.nan):
+# --- Market Sentiment Cache ---
+_market_sentiment_cache = {}
+
+
+def normalize_date_key(value) -> str:
+    """キャッシュキー用に日付をYYYY-MM-DD文字列へ正規化する"""
+    return pd.to_datetime(value).strftime('%Y-%m-%d')
+
+
+def calculate_market_sentiment(signal_date_str: str) -> float:
+    """シグナル日の市場環境指標（MA75超え銘柄比率）を計算する。
+
+    scan.pyと同じ定義:
+    - 対象: TOPIX Small 1 / Small 2 / Mid400
+    - 各銘柄の close > MA75 なら bullish
+    - market_sentiment = bullish数 / 全銘柄数
+
+    日付ごとにキャッシュして重複計算を回避。
+    """
+    signal_date_str = normalize_date_key(signal_date_str)
+    if signal_date_str in _market_sentiment_cache:
+        return _market_sentiment_cache[signal_date_str]
+
+    conn = sqlite3.connect(DB_PATH)
+
+    # MA75計算のため、シグナル日から十分遡った日付を取得
+    # 75営業日 ≒ 約150カレンダー日
+    lookback_date = (pd.to_datetime(signal_date_str) - timedelta(days=160)).strftime('%Y-%m-%d')
+
+    scalecat_list = "', '".join(SCALECAT_TARGETS)
+    query = f"""
+    SELECT p.date, p.code, p.close
+    FROM prices p
+    JOIN fundamentals f ON p.code = f.code
+    WHERE f.scalecat IN ('{scalecat_list}')
+    AND p.date >= '{lookback_date}'
+    AND p.date <= '{signal_date_str}'
+    ORDER BY p.code, p.date
+    """
+    df = pd.read_sql(query, conn, parse_dates=['date'])
+    conn.close()
+
+    if df.empty:
+        _market_sentiment_cache[signal_date_str] = np.nan
+        return np.nan
+
+    # MA75を計算
+    df['ma_long'] = df.groupby('code')['close'].transform(
+        lambda x: x.rolling(MARKET_MA_PERIOD).mean()
+    )
+
+    # シグナル日のデータを抽出
+    target_date = df['date'].max()  # signal_date が休場なら直近営業日
+    latest = df[df['date'] == target_date].copy()
+
+    if latest.empty:
+        _market_sentiment_cache[signal_date_str] = np.nan
+        return np.nan
+
+    n_stocks = len(latest)
+    n_bullish = (latest['close'] > latest['ma_long']).sum()
+    sentiment = n_bullish / n_stocks if n_stocks > 0 else 0.0
+
+    _market_sentiment_cache[signal_date_str] = sentiment
+    return sentiment
+
+
+def calculate_market_sentiments(signal_dates) -> dict:
+    """複数シグナル日の市場環境指標をまとめて計算する"""
+    date_keys = sorted({normalize_date_key(d) for d in signal_dates})
+    missing_dates = [d for d in date_keys if d not in _market_sentiment_cache]
+    if not missing_dates:
+        return {d: _market_sentiment_cache[d] for d in date_keys}
+
+    min_date = pd.to_datetime(min(missing_dates))
+    max_date = pd.to_datetime(max(missing_dates))
+    lookback_date = (min_date - timedelta(days=160)).strftime('%Y-%m-%d')
+    max_date_str = max_date.strftime('%Y-%m-%d')
+
+    conn = sqlite3.connect(DB_PATH)
+    scalecat_list = "', '".join(SCALECAT_TARGETS)
+    query = f"""
+    SELECT p.date, p.code, p.close
+    FROM prices p
+    JOIN fundamentals f ON p.code = f.code
+    WHERE f.scalecat IN ('{scalecat_list}')
+    AND p.date >= '{lookback_date}'
+    AND p.date <= '{max_date_str}'
+    ORDER BY p.code, p.date
+    """
+    df = pd.read_sql(query, conn, parse_dates=['date'])
+    conn.close()
+
+    if df.empty:
+        for d in missing_dates:
+            _market_sentiment_cache[d] = np.nan
+        return {d: _market_sentiment_cache[d] for d in date_keys}
+
+    df['ma_long'] = df.groupby('code')['close'].transform(
+        lambda x: x.rolling(MARKET_MA_PERIOD).mean()
+    )
+
+    available_dates = sorted(df['date'].dropna().unique())
+    for date_key in missing_dates:
+        signal_date = pd.to_datetime(date_key)
+        eligible_dates = [d for d in available_dates if d <= signal_date]
+        if not eligible_dates:
+            _market_sentiment_cache[date_key] = np.nan
+            continue
+
+        target_date = eligible_dates[-1]
+        latest = df[df['date'] == target_date]
+        n_stocks = len(latest)
+        n_bullish = (latest['close'] > latest['ma_long']).sum()
+        _market_sentiment_cache[date_key] = n_bullish / n_stocks if n_stocks > 0 else 0.0
+
+    return {d: _market_sentiment_cache[d] for d in date_keys}
+
+
+def classify_market_bucket(sentiment: float) -> str:
+    """market_sentimentをバケットに分類する"""
+    if pd.isna(sentiment):
+        return 'unknown'
+    if sentiment < MARKET_BULLISH_THRESHOLD:
+        return MARKET_BUCKET_BEARISH
+    elif sentiment < 0.50:
+        return MARKET_BUCKET_NEUTRAL
+    else:
+        return MARKET_BUCKET_BULLISH
+
+
+def build_unevaluated_result(sig, eval_observations=0, next_open=np.nan, market_sentiment=np.nan):
     """評価不能または未成熟なシグナルの結果行を作る"""
     signal_price_num = coerce_numeric(sig.get('signal_price', np.nan))
     signal_price_ratio = signal_price_num / next_open if pd.notna(signal_price_num) and pd.notna(next_open) and next_open > 0 else np.nan
@@ -67,6 +208,8 @@ def build_unevaluated_result(sig, eval_observations=0, next_open=np.nan):
         'eval_price': np.nan,
         'stop_loss_hit': np.nan,
         'take_profit_hit': np.nan,
+        'market_sentiment': market_sentiment,
+        'market_bucket': classify_market_bucket(market_sentiment),
     }
 
 
@@ -158,6 +301,11 @@ def calculate_performance(signals_df: pd.DataFrame, eval_days: int = EVAL_DAYS) 
     if prices_df.empty:
         print("[WARN] No price data found for evaluation")
         return pd.DataFrame([build_unevaluated_result(sig) for _, sig in signals_df.iterrows()])
+
+    # 市場環境を日付ごとに事前計算
+    unique_dates = signals_df['signal_date'].unique()
+    print(f"[INFO] Calculating market sentiment for {len(unique_dates)} unique dates...")
+    market_sentiments = calculate_market_sentiments(unique_dates)
     
     # 各シグナルに対してパフォーマンスを計算
     results = []
@@ -168,8 +316,12 @@ def calculate_performance(signals_df: pd.DataFrame, eval_days: int = EVAL_DAYS) 
         
         # 該当銘柄の株価を取得
         code_prices = prices_df[prices_df['code'] == code].copy()
+        # 市場環境をキャッシュから取得
+        signal_date_key = normalize_date_key(sig['signal_date'])
+        ms = market_sentiments.get(signal_date_key, np.nan)
+
         if code_prices.empty:
-            results.append(build_unevaluated_result(sig))
+            results.append(build_unevaluated_result(sig, market_sentiment=ms))
             continue
         
         # シグナル日以降のデータ
@@ -178,7 +330,7 @@ def calculate_performance(signals_df: pd.DataFrame, eval_days: int = EVAL_DAYS) 
         
         if eval_observations < eval_days:
             next_open = future_prices.iloc[0]['open'] if not future_prices.empty else np.nan
-            results.append(build_unevaluated_result(sig, eval_observations=eval_observations, next_open=next_open))
+            results.append(build_unevaluated_result(sig, eval_observations=eval_observations, next_open=next_open, market_sentiment=ms))
             continue
         
         next_open = future_prices.iloc[0]['open']
@@ -217,6 +369,8 @@ def calculate_performance(signals_df: pd.DataFrame, eval_days: int = EVAL_DAYS) 
             'eval_price': eval_price,
             'stop_loss_hit': stop_loss_hit,
             'take_profit_hit': take_profit_hit,
+            'market_sentiment': ms,
+            'market_bucket': classify_market_bucket(ms),
         })
     
     return pd.DataFrame(results)
@@ -302,6 +456,25 @@ def generate_report(year_month: str, eval_days: int = EVAL_DAYS):
             print("  [BOTTOM 3]")
             for _, row in valid_subset.nsmallest(3, 'return_pct').iterrows():
                 print(f"    {row['code']} {row['name'][:10]}: {row['return_pct']:+.1f}%")
+
+    # 市場環境別集計
+    if 'market_bucket' in completed_df.columns:
+        print(f"\n{'='*60}")
+        print("■ 市場環境別ENTRY成績")
+        print("-" * 40)
+        entry_complete = completed_df[completed_df['verdict'] == 'ENTRY']
+        if not entry_complete.empty:
+            for bucket in [MARKET_BUCKET_BEARISH, MARKET_BUCKET_NEUTRAL, MARKET_BUCKET_BULLISH]:
+                bucket_df = entry_complete[entry_complete['market_bucket'] == bucket]
+                if bucket_df.empty:
+                    print(f"  {bucket}: 該当なし")
+                    continue
+                avg_r = bucket_df['return_pct'].mean()
+                wr = (bucket_df['return_pct'] > 0).mean() * 100
+                sl = bucket_df['stop_loss_hit'].mean() * 100
+                print(f"  {bucket}: {len(bucket_df)}件, 平均{avg_r:+.2f}%, 勝率{wr:.1f}%, 損切り{sl:.1f}%")
+        else:
+            print("  ENTRY判定なし")
     
     print("\n" + "=" * 60)
     
@@ -402,6 +575,48 @@ def write_markdown_report(year_month: str, results_df: pd.DataFrame, eval_days: 
             ].head(20)
         ),
         "",
+    ]
+
+    # 市場環境セクション
+    if 'market_sentiment' in completed_df.columns:
+        # 日別 market_sentiment 一覧
+        daily_sentiment = (
+            completed_df.groupby('signal_date')
+            .agg(market_sentiment=('market_sentiment', 'first'), market_bucket=('market_bucket', 'first'))
+            .reset_index()
+            .sort_values('signal_date')
+        )
+        lines.extend([
+            "## Market Sentiment by Date",
+            dataframe_to_markdown(daily_sentiment),
+            "",
+        ])
+
+        # market_bucket × verdict クロス集計
+        bucket_verdict = pd.DataFrame()
+        for bucket in [MARKET_BUCKET_BEARISH, MARKET_BUCKET_NEUTRAL, MARKET_BUCKET_BULLISH]:
+            for verdict in ['ENTRY', 'WATCH', 'REJECT']:
+                bv = completed_df[(completed_df['market_bucket'] == bucket) & (completed_df['verdict'] == verdict)]
+                if bv.empty:
+                    continue
+                bucket_verdict = pd.concat([bucket_verdict, pd.DataFrame([{
+                    'market_bucket': bucket,
+                    'verdict': verdict,
+                    'count': len(bv),
+                    'avg_return_pct': bv['return_pct'].mean(),
+                    'median_return_pct': bv['return_pct'].median(),
+                    'win_rate_pct': (bv['return_pct'] > 0).mean() * 100,
+                    'stop_hit_pct': bv['stop_loss_hit'].mean() * 100,
+                    'take_hit_pct': bv['take_profit_hit'].mean() * 100,
+                }])], ignore_index=True)
+
+        lines.extend([
+            "## Market Bucket x Verdict Summary",
+            dataframe_to_markdown(bucket_verdict),
+            "",
+        ])
+
+    lines.extend([
         "## Best 10",
         dataframe_to_markdown(
             completed_df.nlargest(10, 'return_pct')[
@@ -416,7 +631,7 @@ def write_markdown_report(year_month: str, results_df: pd.DataFrame, eval_days: 
             ]
         ),
         "",
-    ]
+    ])
     output_path.write_text("\n".join(lines), encoding="utf-8")
     return output_path
 
