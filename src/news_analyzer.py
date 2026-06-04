@@ -14,6 +14,7 @@ import yfinance as yf
 from datetime import datetime, timedelta
 from typing import Dict, Optional, List
 import logging
+import re
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -44,6 +45,13 @@ KILLER_KEYWORDS = [
 # 判定閾値
 MARKET_DROP_THRESHOLD = -2.0  # 市場が-2%以上下落で「地合い悪」
 SECTOR_DIP_THRESHOLD = -3.0   # 個別銘柄が-3%以上下落で「押し目候補」
+
+_SENSITIVE_PARAMS_RE = re.compile(r'([?&](?:key|cx))=[^&\s]+', re.IGNORECASE)
+
+
+def mask_api_keys(text) -> str:
+    """エラーメッセージ中のAPIキーや機密パラメータをマスクする"""
+    return _SENSITIVE_PARAMS_RE.sub(r'\1=***', str(text))
 
 
 def get_nikkei_change() -> float:
@@ -116,9 +124,9 @@ def search_news_google(company_name: str, max_results: int = 3) -> List[dict]:
                     break
                     
     except requests.exceptions.RequestException as e:
-        logger.warning(f"[NEWS] Google CSE request failed for {company_name}: {e}")
+        logger.warning(f"[NEWS] Google CSE request failed for {company_name}: {mask_api_keys(e)}")
     except Exception as e:
-        logger.warning(f"[NEWS] Search failed for {company_name}: {e}")
+        logger.warning(f"[NEWS] Search failed for {company_name}: {mask_api_keys(e)}")
     
     return hits
 
