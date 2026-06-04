@@ -13,6 +13,7 @@ from datetime import datetime
 DB_PATH = Path(__file__).parent.parent / "stock_data.db"
 DIP_THRESHOLD = 0.97       # 押し目
 MARKET_BULLISH_THRESHOLD = 0.40  # 市場環境フィルター
+REBOUND_GUARD_MA25_THRESHOLD = -8.0  # これ以下のMA25乖離はENTRY→WATCHに降格
 STOP_LOSS_PCT = 0.05       # 損切り -5% (Golden Configurationより)
 
 # フィルタリング設定
@@ -21,6 +22,32 @@ SCALECAT_TARGETS = ['TOPIX Small 1', 'TOPIX Small 2', 'TOPIX Mid400']
 
 # Google Sheets連携（オプション）
 ENABLE_SHEETS_NOTIFICATION = True
+
+
+def apply_rebound_guard(signals: list) -> int:
+    """MA25乖離が深すぎるENTRYをWATCHに降格する（落ちるナイフ対策）。
+
+    対象: verdict == 'ENTRY' かつ ma25_rate <= REBOUND_GUARD_MA25_THRESHOLD
+    処理: verdict を 'WATCH' に変更し、reason にガード理由を追記。
+
+    Returns:
+        降格した件数
+    """
+    guard_count = 0
+    for signal in signals:
+        if signal.get('verdict') != 'ENTRY':
+            continue
+        try:
+            ma25_rate = float(signal.get('ma25_rate', 0))
+        except (ValueError, TypeError):
+            continue
+        if ma25_rate <= REBOUND_GUARD_MA25_THRESHOLD:
+            signal['verdict'] = 'WATCH'
+            original_reason = signal.get('reason', '')
+            guard_reason = f'Guard: MA25={ma25_rate:.1f}%(<={REBOUND_GUARD_MA25_THRESHOLD}%) rebound confirmation required'
+            signal['reason'] = f'{guard_reason}; {original_reason}' if original_reason else guard_reason
+            guard_count += 1
+    return guard_count
 
 
 def calculate_rsi(series, period=14):
@@ -200,6 +227,14 @@ def analyze_market():
             watch_count = sum(1 for s in formatted_signals if s.get('verdict') == 'WATCH')
             reject_count = sum(1 for s in formatted_signals if s.get('verdict') == 'REJECT')
             print(f"[NEWS] Analysis complete: ENTRY={entry_count}, WATCH={watch_count}, REJECT={reject_count}")
+            
+            # --- リバウンドガード適用 ---
+            guard_count = apply_rebound_guard(formatted_signals)
+            if guard_count > 0:
+                entry_count = sum(1 for s in formatted_signals if s.get('verdict') == 'ENTRY')
+                watch_count = sum(1 for s in formatted_signals if s.get('verdict') == 'WATCH')
+                print(f"[GUARD] Demoted {guard_count} deep-dip ENTRY to WATCH (MA25<={REBOUND_GUARD_MA25_THRESHOLD}%)")
+                print(f"[GUARD] After guard: ENTRY={entry_count}, WATCH={watch_count}, REJECT={reject_count}")
             
         except ImportError:
             print("[NEWS] WARN: 'src.news_analyzer' not found. Skipping news analysis.")
