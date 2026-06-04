@@ -57,6 +57,7 @@ Thumbs.db
 # Test files
 test_*.py
 !tests/test_*.py
+!tests/integration/test_*.py
 
 # Temporary analysis scripts
 temp_*.py
