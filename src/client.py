@@ -78,9 +78,11 @@ class JQuantsClient:
             params["code"] = code
         return self.get("/equities/bars/daily", params=params)
     
-    def get_financial_summary(self, code=None):
+    def get_financial_summary(self, code=None, date=None):
         """財務情報を取得 (V2: /fins/summary)"""
         params = {}
         if code:
             params["code"] = code
+        if date:
+            params["date"] = date
         return self.get("/fins/summary", params=params)

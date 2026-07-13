@@ -33,6 +33,11 @@ def get_sheet_name() -> str:
     """日付入りのシート名を生成する（例: Signals_20260120）"""
     return f"Signals_{datetime.now().strftime('%Y%m%d')}"
 
+
+def get_dividend_sheet_name() -> str:
+    """日付入りの配当候補シート名を生成する。"""
+    return f"Dividend_{datetime.now().strftime('%Y%m%d')}"
+
 # API Scopes
 SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets',
@@ -127,6 +132,77 @@ def update_signal_sheet(signal_data: List[Dict[str, Any]], spreadsheet_key: str 
 
     except Exception as e:
         logger.error(f"[NOTIFIER] Failed to update Google Sheets: {e}")
+        return False
+
+
+def update_dividend_candidate_sheet(
+    candidates: List[Dict[str, Any]],
+    spreadsheet_key: str = SPREADSHEET_KEY,
+) -> bool:
+    """長期配当候補を専用シートに上書き保存する。"""
+    if spreadsheet_key == "YOUR_SPREADSHEET_ID_HERE" or not spreadsheet_key:
+        logger.warning("[NOTIFIER] Spreadsheet Key is not configured.")
+        return False
+
+    client = get_sheets_client()
+    if not client:
+        return False
+
+    try:
+        sh = client.open_by_key(spreadsheet_key)
+        sheet_name = get_dividend_sheet_name()
+        try:
+            worksheet = sh.worksheet(sheet_name)
+        except gspread.WorksheetNotFound:
+            logger.info(f"[NOTIFIER] Sheet '{sheet_name}' not found. Creating new sheet...")
+            worksheet = sh.add_worksheet(title=sheet_name, rows=200, cols=20)
+
+        header = [
+            '更新日時', '日付', '銘柄コード', '銘柄名', '現在値',
+            '配当利回り(%)', '配当性向(%)', '自己資本比率(%)',
+            '20日平均出来高', 'MA75', 'MA200', '判定結果', 'スコア',
+            '判定理由', 'ニュースリスク', 'News Hit', '開示日',
+            '期間', '業種', '市場'
+        ]
+
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M')
+        rows = []
+        for item in candidates:
+            rows.append([
+                current_time,
+                str(item.get('date', '')),
+                str(item.get('code', '')),
+                str(item.get('name', '')),
+                item.get('close', ''),
+                item.get('dividend_yield', ''),
+                item.get('payout_ratio', ''),
+                item.get('equity_ratio', ''),
+                item.get('avg_volume_20', ''),
+                item.get('ma75', ''),
+                item.get('ma200', ''),
+                str(item.get('verdict', '')),
+                item.get('score', ''),
+                str(item.get('reason', '')),
+                str(item.get('news_risk', '')),
+                str(item.get('news_hit', '')),
+                str(item.get('disclosure_date', '')),
+                str(item.get('period', '')),
+                str(item.get('s33nm', '')),
+                str(item.get('mktnm', '')),
+            ])
+
+        worksheet.clear()
+        if rows:
+            worksheet.update(range_name='A1', values=[header] + rows)
+            logger.info(f"[NOTIFIER] Successfully updated dividend sheet with {len(rows)} rows.")
+        else:
+            worksheet.update(range_name='A1', values=[header, ["(No dividend candidates)"]])
+            logger.info("[NOTIFIER] No dividend candidates to report.")
+
+        return True
+
+    except Exception as e:
+        logger.error(f"[NOTIFIER] Failed to update dividend Google Sheet: {e}")
         return False
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.news_analyzer import mask_api_keys
+from src.news_analyzer import analyze_dividend_risk, is_company_relevant_hit, mask_api_keys
 
 
 class NewsAnalyzerMaskTest(unittest.TestCase):
@@ -38,6 +38,53 @@ class NewsAnalyzerMaskTest(unittest.TestCase):
         message = "timeout while searching Toyota"
 
         self.assertEqual(mask_api_keys(message), message)
+
+
+class DividendRiskAnalyzerTest(unittest.TestCase):
+    def test_company_relevance_accepts_target_company(self):
+        self.assertTrue(is_company_relevant_hit(
+            "パーソルホールディングス",
+            "パーソルHDが業績予想を下方修正",
+            "",
+        ))
+
+    def test_company_relevance_rejects_unrelated_keyword_page(self):
+        self.assertFalse(is_company_relevant_hit(
+            "パーソルホールディングス",
+            "JAL、赤字は回避 欧州線が好調",
+            "",
+        ))
+
+    def test_high_risk_when_keyword_news_hits(self):
+        import src.news_analyzer as news_analyzer
+
+        original = news_analyzer.search_news_with_keywords
+        try:
+            news_analyzer.search_news_with_keywords = lambda name, keywords, max_results=3: [
+                {"title": "テスト会社 減配を発表", "keyword": "減配", "link": "https://example.test"}
+            ]
+
+            result = analyze_dividend_risk("12340", "テスト会社")
+
+            self.assertEqual(result["risk"], "HIGH")
+            self.assertIn("DividendRisk:減配", result["reason"])
+            self.assertIn("減配", result["news_hit"])
+        finally:
+            news_analyzer.search_news_with_keywords = original
+
+    def test_low_risk_when_no_news_hits(self):
+        import src.news_analyzer as news_analyzer
+
+        original = news_analyzer.search_news_with_keywords
+        try:
+            news_analyzer.search_news_with_keywords = lambda name, keywords, max_results=3: []
+
+            result = analyze_dividend_risk("12340", "テスト会社")
+
+            self.assertEqual(result["risk"], "LOW")
+            self.assertEqual(result["news_hit"], "")
+        finally:
+            news_analyzer.search_news_with_keywords = original
 
 
 if __name__ == '__main__':

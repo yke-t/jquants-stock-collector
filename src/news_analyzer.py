@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Optional, List
 import logging
 import re
+import unicodedata
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -42,11 +43,53 @@ KILLER_KEYWORDS = [
     "粉飾",
 ]
 
+# Dividend strategy risk keywords. These are stricter than the short-term
+# dip-entry filter because dividend cuts and earnings deterioration directly
+# affect the long-term income thesis.
+DIVIDEND_RISK_KEYWORDS = [
+    "減配",
+    "無配",
+    "下方修正",
+    "赤字",
+    "赤字転落",
+    "業績悪化",
+    "特別損失",
+    "継続企業",
+    "不祥事",
+    "粉飾",
+]
+
 # 判定閾値
 MARKET_DROP_THRESHOLD = -2.0  # 市場が-2%以上下落で「地合い悪」
 SECTOR_DIP_THRESHOLD = -3.0   # 個別銘柄が-3%以上下落で「押し目候補」
 
 _SENSITIVE_PARAMS_RE = re.compile(r'([?&](?:key|cx))=[^&\s]+', re.IGNORECASE)
+
+
+def normalize_company_text(text: str) -> str:
+    """Normalize company/news text for rough Japanese relevance matching."""
+    normalized = unicodedata.normalize("NFKC", str(text)).lower()
+    for noise in ("株式会社", "(株)", "（株）", "ホールディングス", "グループ"):
+        normalized = normalized.replace(noise.lower(), "")
+    return re.sub(r"\s+", "", normalized)
+
+
+def is_company_relevant_hit(company_name: str, title: str, snippet: str = "") -> bool:
+    """Return True when a search hit appears to refer to the target company."""
+    company = normalize_company_text(company_name)
+    text = normalize_company_text(title + " " + snippet)
+    if not company:
+        return False
+    if company in text:
+        return True
+
+    # Allow long company names to match on a stable prefix. This avoids broad
+    # keyword-only hits such as market-wide "赤字" pages.
+    if len(company) >= 6 and company[:6] in text:
+        return True
+    if len(company) >= 4 and company[:4] in text and any(ch.isdigit() for ch in company):
+        return True
+    return False
 
 
 def mask_api_keys(text) -> str:
@@ -129,6 +172,85 @@ def search_news_google(company_name: str, max_results: int = 3) -> List[dict]:
         logger.warning(f"[NEWS] Search failed for {company_name}: {mask_api_keys(e)}")
     
     return hits
+
+
+def search_news_with_keywords(company_name: str, keywords: List[str], max_results: int = 3) -> List[dict]:
+    """Search Google CSE and return hits containing any of the supplied keywords."""
+    if not GOOGLE_CSE_API_KEY or not GOOGLE_CSE_ID:
+        logger.warning("[NEWS] Google CSE API key or ID not configured. Skipping search.")
+        return []
+
+    keywords_query = " OR ".join(keywords[:6])
+    query = f"{company_name} ({keywords_query})"
+    url = "https://www.googleapis.com/customsearch/v1"
+    params = {
+        "key": GOOGLE_CSE_API_KEY,
+        "cx": GOOGLE_CSE_ID,
+        "q": query,
+        "num": max_results,
+        "lr": "lang_ja",
+        "dateRestrict": "m1",
+    }
+
+    hits = []
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+
+        for item in data.get("items", []):
+            title = item.get("title", "")
+            snippet = item.get("snippet", "")
+            if not is_company_relevant_hit(company_name, title, ""):
+                continue
+            text = title
+            for keyword in keywords:
+                if keyword in text:
+                    hits.append({
+                        "title": title,
+                        "keyword": keyword,
+                        "link": item.get("link", ""),
+                    })
+                    break
+    except requests.exceptions.RequestException as e:
+        logger.warning(f"[NEWS] Google CSE request failed for {company_name}: {mask_api_keys(e)}")
+    except Exception as e:
+        logger.warning(f"[NEWS] Search failed for {company_name}: {mask_api_keys(e)}")
+
+    return hits
+
+
+def analyze_dividend_risk(code: str, name: str) -> Dict:
+    """Analyze news risk for long-term dividend candidates."""
+    logger.info(f"[NEWS] Analyzing dividend risk {code} ({name})...")
+    hits = search_news_with_keywords(name, DIVIDEND_RISK_KEYWORDS, max_results=3)
+    if hits:
+        first_hit = hits[0]
+        title = first_hit["title"]
+        return {
+            "code": code,
+            "risk": "HIGH",
+            "reason": f"DividendRisk:{first_hit['keyword']}",
+            "news_hit": title[:50] + "..." if len(title) > 50 else title,
+        }
+
+    return {
+        "code": code,
+        "risk": "LOW",
+        "reason": "No dividend risk news",
+        "news_hit": "",
+    }
+
+
+def batch_analyze_dividend_risk(candidates: list) -> list:
+    """Analyze dividend risk news for multiple candidates."""
+    results = []
+    for candidate in candidates:
+        results.append(analyze_dividend_risk(
+            code=str(candidate.get("code", "")),
+            name=str(candidate.get("name", "")),
+        ))
+    return results
 
 
 def analyze_stock(

@@ -49,6 +49,7 @@ env/
 
 # Generated evaluation charts
 charts/*.png
+reports/*.csv
 
 # OS files
 .DS_Store

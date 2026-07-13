@@ -6,6 +6,7 @@ SQLiteデータベース操作クラス
 
 import sqlite3
 import os
+import json
 from pathlib import Path
 
 
@@ -99,6 +100,28 @@ class StockDatabase:
         """)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_signals_date ON signals(signal_date)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_signals_verdict ON signals(verdict)")
+
+        # Long-term dividend strategy financial snapshots.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS dividend_financials (
+                code TEXT NOT NULL,
+                disclosure_date TEXT NOT NULL,
+                fiscal_year TEXT,
+                period TEXT,
+                dividend_per_share REAL,
+                forecast_dividend_per_share REAL,
+                eps REAL,
+                forecast_eps REAL,
+                profit REAL,
+                equity REAL,
+                total_assets REAL,
+                raw_json TEXT,
+                updated_at TEXT,
+                PRIMARY KEY (code, disclosure_date, period)
+            )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_dividend_financials_code ON dividend_financials(code)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_dividend_financials_date ON dividend_financials(disclosure_date)")
         
         conn.commit()
         conn.close()
@@ -210,6 +233,50 @@ class StockDatabase:
             except Exception as e:
                 print(f"[DB] Error saving signal {sig.get('code')}: {e}")
         
+        conn.commit()
+        conn.close()
+        return saved
+
+    def save_dividend_financials(self, rows):
+        """Save normalized dividend financial rows for long-term scans."""
+        if not rows:
+            return 0
+
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        saved = 0
+        for row in rows:
+            try:
+                raw_json = row.get('raw_json', '')
+                if raw_json and not isinstance(raw_json, str):
+                    raw_json = json.dumps(raw_json, ensure_ascii=False, sort_keys=True)
+
+                cursor.execute("""
+                    INSERT OR REPLACE INTO dividend_financials
+                    (code, disclosure_date, fiscal_year, period, dividend_per_share,
+                     forecast_dividend_per_share, eps, forecast_eps, profit, equity,
+                     total_assets, raw_json, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    str(row.get('code', '')),
+                    str(row.get('disclosure_date', '')),
+                    str(row.get('fiscal_year', '') or ''),
+                    str(row.get('period', '') or ''),
+                    row.get('dividend_per_share'),
+                    row.get('forecast_dividend_per_share'),
+                    row.get('eps'),
+                    row.get('forecast_eps'),
+                    row.get('profit'),
+                    row.get('equity'),
+                    row.get('total_assets'),
+                    raw_json,
+                    str(row.get('updated_at', '') or ''),
+                ))
+                saved += 1
+            except Exception as e:
+                print(f"[DB] Error saving dividend financial {row.get('code')}: {e}")
+
         conn.commit()
         conn.close()
         return saved
