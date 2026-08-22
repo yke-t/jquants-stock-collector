@@ -97,3 +97,25 @@ The split-sensitive dividend paths and external output paths have been
 revalidated with live outputs. Future operational changes still require an
 actual command result, relevant DB rows or dates, and produced-artifact checks;
 offline tests alone are not sufficient evidence.
+
+## Antigravity cleanup status
+
+Project-specific Antigravity workspace state, code-tracker snapshots, IDE file
+history, conversation history, and project registration were removed on
+2026-08-22. The cleanup removed 390 files (23,133,061 bytes), scrubbed ten
+project references from the shared VS Code-style state databases, and removed
+two project-specific rows from a shared conversation database. The local
+cleanup manifest is stored outside the repository under
+`Documents\Codex Backups\jquants-stock-collector\antigravity-cleanup-20260822`.
+
+The active repository `.env`, `stock_data.db`, Windows Task Scheduler entries,
+and histories belonging to other Antigravity projects were preserved. Two
+shared `agyhub_summaries_proto.pb` cache files still contain a project-name
+reference because they cannot be edited per project without risking unrelated
+summaries. They are not an execution path. Remove the entire Antigravity user
+data roots only if Antigravity is being retired for every project.
+
+Historical `.env` snapshots included J-Quants credentials. Those snapshots
+were deleted, but any credential that appeared in Antigravity history should
+still be rotated at its issuing service; local deletion does not revoke it or
+remove copies held by backups or synchronization services.
