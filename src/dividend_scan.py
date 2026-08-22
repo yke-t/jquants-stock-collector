@@ -486,7 +486,7 @@ def save_report(df: pd.DataFrame, output_dir: Path = REPORTS_DIR) -> Optional[Pa
     return path
 
 
-def main():
+def main() -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
 
@@ -501,7 +501,7 @@ def main():
     df = scan_dividend_candidates(Path(args.db), limit=args.limit)
     if df.empty:
         print("[INFO] No dividend candidates. Check prices and dividend_financials data.")
-        return
+        return 1
     if args.with_news:
         df = apply_dividend_news_risk(df)
 
@@ -515,9 +515,13 @@ def main():
             from src.notifier import update_dividend_candidate_sheet
             success = update_dividend_candidate_sheet(df.to_dict("records"))
             print(f"[NOTIFIER] Dividend sheet update: {'OK' if success else 'FAILED'}")
+            if not success:
+                return 1
         except Exception as e:
             print(f"[NOTIFIER] Dividend sheet update failed: {e}")
+            return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

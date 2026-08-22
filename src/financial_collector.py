@@ -172,7 +172,12 @@ def collect_financial_summary(
         if normalized:
             normalized_rows.append(normalized)
 
-    return db.save_dividend_financials(normalized_rows)
+    saved = db.save_dividend_financials(normalized_rows)
+    if saved != len(normalized_rows):
+        raise RuntimeError(
+            f"Saved {saved} of {len(normalized_rows)} normalized financial row(s)"
+        )
+    return saved
 
 
 def load_codes_from_db(
@@ -250,6 +255,7 @@ def collect_for_codes(
     sleep_seconds: float = 0.2,
 ) -> int:
     total_saved = 0
+    failures = []
     for idx, code in enumerate(codes, start=1):
         try:
             saved = collect_financial_summary(client, db, code=code)
@@ -261,12 +267,18 @@ def collect_for_codes(
             print(f"[{idx}/{len(codes)}] {code}: saved {saved}")
         except Exception as e:
             print(f"[WARN] {code}: {e}")
+            failures.append(code)
         if sleep_seconds > 0:
             time.sleep(sleep_seconds)
+    if failures:
+        raise RuntimeError(
+            f"Financial collection failed for {len(failures)} code(s): "
+            f"{','.join(failures[:10])}"
+        )
     return total_saved
 
 
-def main():
+def main() -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
 
@@ -304,7 +316,7 @@ def main():
         print(f"[DEBUG] row count: {len(rows)}")
         if rows:
             print(f"[DEBUG] first row fields: {sorted(rows[0].keys())}")
-        return
+        return 0
 
     if args.all_codes:
         stale_before = None
@@ -331,7 +343,8 @@ def main():
         raise SystemExit("Specify --code, --date, or --all-codes. Use --limit with --all-codes for a trial run.")
 
     print(f"[DONE] Saved {saved} dividend financial rows")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

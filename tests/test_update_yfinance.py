@@ -12,10 +12,43 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from src import update_yfinance
 from src.update_yfinance import fetch_single_stock, update_database
 
 
 class UpdateYfinanceTest(unittest.TestCase):
+    @patch("src.update_yfinance.yf.Ticker")
+    def test_single_stock_fetch_propagates_network_failure(self, ticker):
+        ticker.return_value.history.side_effect = RuntimeError("network down")
+
+        with self.assertRaisesRegex(RuntimeError, "fetch failed for 20030"):
+            fetch_single_stock(
+                "2003.T", "20030", "2026-08-20", "2026-08-22"
+            )
+
+    def test_daily_update_returns_failure_when_database_is_missing(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            missing = Path(temp_dir) / "missing.db"
+            with patch.object(update_yfinance, "DB_PATH", missing):
+                self.assertEqual(update_yfinance.run_daily_update(), 1)
+
+    def test_daily_update_returns_failure_on_partial_database_update(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "prices.db"
+            db_path.touch()
+            fetched = pd.DataFrame([{
+                "date": "2026-08-21",
+                "code": "20030",
+                "close": 1821.0,
+            }])
+            with (
+                patch.object(update_yfinance, "DB_PATH", db_path),
+                patch.object(update_yfinance, "get_target_codes", return_value=["20030"]),
+                patch.object(update_yfinance, "fetch_yfinance_data", return_value=fetched),
+                patch.object(update_yfinance, "update_database", return_value=0),
+            ):
+                self.assertEqual(update_yfinance.run_daily_update(), 1)
+
     @patch("src.update_yfinance.yf.Ticker")
     def test_split_ratio_is_stored_as_per_share_adjustment_factor(self, ticker):
         ticker.return_value.history.return_value = pd.DataFrame(

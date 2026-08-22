@@ -244,7 +244,7 @@ def save_backtest_report(results: pd.DataFrame, output_dir: Path = REPORTS_DIR) 
     return path
 
 
-def main():
+def main() -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
 
@@ -266,7 +266,7 @@ def main():
     )
     if results.empty:
         print("[INFO] No backtest results. Check dividend_financials coverage.")
-        return
+        return 1
 
     summary = summarize_backtest(results)
     print("Dividend Monthly Backtest")
@@ -281,7 +281,8 @@ def main():
         path = save_backtest_report(results)
         if path:
             print(f"[REPORT] Saved {path}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

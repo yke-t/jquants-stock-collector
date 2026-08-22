@@ -112,7 +112,7 @@ def sync_to_bigquery(df: pd.DataFrame) -> int:
     return len(df)
 
 
-def run_daily_sync():
+def run_daily_sync() -> int:
     """日次同期を実行"""
     print("="*60)
     print(f"BigQuery Daily Sync - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
@@ -122,15 +122,15 @@ def run_daily_sync():
     
     if not DB_PATH.exists():
         print(f"[ERROR] Database not found: {DB_PATH}")
-        return
+        return 1
     
     # 1. 直近データを取得
     print(f"[INFO] Loading recent {SYNC_DAYS} days from SQLite...")
     df = get_recent_data(DB_PATH, SYNC_DAYS)
     
     if df.empty:
-        print("[WARN] No recent data found.")
-        return
+        print("[ERROR] No recent data found.")
+        return 1
     
     # 日付範囲を表示
     dates = sorted(df['date'].unique())
@@ -141,11 +141,15 @@ def run_daily_sync():
     print("[INFO] Syncing to BigQuery (MERGE)...")
     count = sync_to_bigquery(df)
     print(f"[INFO] Synced {count} records")
+    if count != len(df):
+        print(f"[ERROR] Synced {count} of {len(df)} records")
+        return 1
     
     print("="*60)
     print("[SUCCESS] Daily sync completed!")
     print("="*60)
+    return 0
 
 
 if __name__ == "__main__":
-    run_daily_sync()
+    raise SystemExit(run_daily_sync())

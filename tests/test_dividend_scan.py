@@ -2,6 +2,7 @@
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -13,6 +14,7 @@ from src.dividend_scan import (
     build_candidate_frame,
     classify_candidate,
 )
+from src import dividend_scan
 
 
 def row(**overrides):
@@ -34,6 +36,25 @@ def row(**overrides):
 
 
 class DividendScanClassificationTest(unittest.TestCase):
+    @patch("src.dividend_scan.scan_dividend_candidates", return_value=pd.DataFrame())
+    def test_main_returns_failure_when_candidate_data_is_unavailable(self, _scan):
+        with patch.object(sys, "argv", ["dividend_scan", "--no-save"]):
+            self.assertEqual(dividend_scan.main(), 1)
+
+    @patch("src.dividend_scan.scan_dividend_candidates")
+    @patch("src.notifier.update_dividend_candidate_sheet", return_value=False)
+    def test_main_returns_failure_when_notification_fails(self, _notify, scan):
+        scan.return_value = pd.DataFrame([{
+            "date": "2026-08-21",
+            "code": "20030",
+            "verdict": "WATCH",
+        }])
+        with patch.object(
+            sys, "argv", ["dividend_scan", "--no-save", "--notify"]
+        ):
+            self.assertEqual(dividend_scan.main(), 1)
+
+
     def test_candidate_frame_excludes_share_price_above_10000(self):
         dates = pd.date_range("2025-01-01", periods=200, freq="B")
         prices = pd.DataFrame([

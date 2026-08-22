@@ -54,8 +54,9 @@ before adopting worktree-based scheduled execution.
   `--stale-days 7 --limit 500`, oldest refresh first. Successful empty
   responses are recorded in `sync_progress` so no-data codes do not starve the
   queue.
-- Several external-operation failures are logged without a non-zero process
-  exit code.
+- Batch entry points return non-zero for unavailable input data, partial local
+  saves, J-Quants/yfinance fetch failures, and failed Sheets or BigQuery writes,
+  allowing Task Scheduler to stop instead of exporting stale artifacts.
 - Live integration tests are not part of the offline unit suite.
 
 Until the factor backfill and remaining items are validated with real outputs,

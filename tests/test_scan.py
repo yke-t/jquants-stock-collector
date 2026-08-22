@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -9,6 +11,12 @@ from src import scan
 
 
 class ReboundGuardTest(unittest.TestCase):
+    def test_scan_returns_failure_when_database_is_missing(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            missing = Path(temp_dir) / "missing.db"
+            with patch.object(scan, "DB_PATH", missing):
+                self.assertEqual(scan.analyze_market(), 1)
+
     def test_demotes_deep_dip_entry_to_watch(self):
         signals = [
             {'code': '12340', 'verdict': 'ENTRY', 'ma25_rate': -10.0, 'reason': 'Normal:通常押し目'},

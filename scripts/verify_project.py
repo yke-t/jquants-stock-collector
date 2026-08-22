@@ -12,6 +12,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 UNIT_TEST_MODULES = [
+    "tests.test_collector",
     "tests.test_export_drive_spreadsheet",
     "tests.test_dividend_scan",
     "tests.test_dividend_backtest",
@@ -22,6 +23,7 @@ UNIT_TEST_MODULES = [
     "tests.test_settings",
     "tests.test_update_yfinance",
     "tests.test_split_factor_backfill",
+    "tests.test_sync_bigquery",
 ]
 REQUIRED_TABLES = {
     "prices",

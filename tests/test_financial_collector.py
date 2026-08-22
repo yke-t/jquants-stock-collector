@@ -9,6 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.financial_collector import (
+    collect_financial_summary,
     collect_for_codes,
     load_codes_from_db,
     normalize_financial_row,
@@ -164,6 +165,38 @@ class FinancialCollectorSchedulingTest(unittest.TestCase):
         self.assertEqual(saved, 0)
         self.assertEqual(len(db.progress), 1)
         self.assertEqual(db.progress[0][0], "dividend_financials:13050")
+
+    def test_partial_database_save_is_failure(self):
+        class OneRowClient:
+            def get_financial_summary(self, code=None, date=None):
+                return {"data": [{
+                    "Code": code,
+                    "DiscDate": "2026-08-01",
+                    "CurPerType": "1Q",
+                }]}
+
+        class FailedDatabase:
+            def save_dividend_financials(self, rows):
+                return 0
+
+        with self.assertRaisesRegex(RuntimeError, "Saved 0 of 1"):
+            collect_financial_summary(
+                OneRowClient(), FailedDatabase(), code="10010"
+            )
+
+    def test_code_failure_returns_batch_failure(self):
+        class FailedClient:
+            def get_financial_summary(self, code=None, date=None):
+                raise RuntimeError("API unavailable")
+
+        class RecordingDatabase:
+            def update_sync_progress(self, table_name, synced_date):
+                raise AssertionError("failed fetch must not advance progress")
+
+        with self.assertRaisesRegex(RuntimeError, "failed for 1 code"):
+            collect_for_codes(
+                FailedClient(), RecordingDatabase(), ["10010"], sleep_seconds=0
+            )
 
 
 if __name__ == "__main__":

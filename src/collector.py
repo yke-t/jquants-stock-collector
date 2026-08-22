@@ -122,6 +122,10 @@ class DataCollector:
                 
                 # データベースに保存
                 count = self.db.save_daily_quotes(df)
+                if count != len(df):
+                    raise RuntimeError(
+                        f"Saved {count} of {len(df)} price row(s) for {date_str}"
+                    )
                 total_records += count
                 
                 # 進捗を更新

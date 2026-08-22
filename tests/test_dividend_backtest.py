@@ -6,15 +6,22 @@ import tempfile
 import unittest
 from contextlib import closing
 from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from src import dividend_backtest
 from src.dividend_backtest import load_backtest_data, next_trading_date_after, period_return, summarize_backtest
 
 
 class DividendBacktestTest(unittest.TestCase):
+    @patch("src.dividend_backtest.run_monthly_backtest", return_value=pd.DataFrame())
+    def test_main_returns_failure_when_backtest_data_is_unavailable(self, _run):
+        with patch.object(sys, "argv", ["dividend_backtest", "--no-save"]):
+            self.assertEqual(dividend_backtest.main(), 1)
+
     def test_next_trading_date_after_uses_following_session(self):
         dates = [
             pd.Timestamp("2026-01-30"),

@@ -66,7 +66,7 @@ def calculate_rsi(series, period=14):
     return rsi
 
 
-def analyze_market():
+def analyze_market() -> int:
     print("="*60)
     print(f"Snow Money Signal Scanner - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print("="*60)
@@ -75,7 +75,7 @@ def analyze_market():
     db_path = DB_PATH
     if not db_path.exists():
         print(f"[ERROR] Database not found: {db_path}")
-        return
+        return 1
         
     conn = sqlite3.connect(db_path)
     
@@ -88,7 +88,7 @@ def analyze_market():
     if dates.empty:
         print("[ERROR] No price data found.")
         conn.close()
-        return
+        return 1
         
     start_date = dates.min()
     
@@ -111,7 +111,7 @@ def analyze_market():
     
     if df.empty:
         print("[ERROR] No data found.")
-        return
+        return 1
 
     latest_date = df['date'].max()
     print(f"[INFO] Latest Data: {latest_date.date()}")
@@ -153,7 +153,7 @@ def analyze_market():
         print("[NG] CONDITION: RED (NO ENTRY)")
         print("     Market is weak. Cash is King. Do NOT buy new positions.")
         print(f"{'='*60}")
-        return
+        return 0
 
     # 4. シグナル抽出
     latest_df['dip_ratio'] = latest_df['close'] / latest_df['ma_short']
@@ -174,7 +174,7 @@ def analyze_market():
         # Google Sheets更新（空の場合はスキップ）
         if ENABLE_SHEETS_NOTIFICATION:
             print("[NOTIFIER] No signals to update.")
-        return
+        return 0
     
     # 候補がある場合
     candidates = candidates.sort_values('dip_ratio')
@@ -195,6 +195,7 @@ def analyze_market():
     
     # --- Google Sheets通知処理 ---
     if ENABLE_SHEETS_NOTIFICATION:
+        had_error = False
         # データ変換 (DataFrame -> List[Dict])
         formatted_signals = []
         for _, row in candidates.head(20).iterrows():
@@ -240,12 +241,14 @@ def analyze_market():
             
         except ImportError:
             print("[NEWS] WARN: 'src.news_analyzer' not found. Skipping news analysis.")
+            had_error = True
             for signal in formatted_signals:
                 signal['verdict'] = 'N/A'
                 signal['reason'] = 'Analysis skipped'
                 signal['news_hit'] = ''
         except Exception as e:
             print(f"[NEWS] ERROR: {e}")
+            had_error = True
             for signal in formatted_signals:
                 signal['verdict'] = 'N/A'
                 signal['reason'] = f'Error: {str(e)[:30]}'
@@ -260,18 +263,22 @@ def analyze_market():
                 # SPREADSHEET_KEYが設定されているか確認
                 if SPREADSHEET_KEY == "YOUR_SPREADSHEET_ID_HERE":
                     print("[NOTIFIER] WARN: Spreadsheet ID not set in src/notifier.py. Skipping.")
+                    had_error = True
                 else:
                     success = update_signal_sheet(formatted_signals)
                     if success:
                         print("[NOTIFIER] Done.")
                     else:
                         print("[NOTIFIER] Failed to update sheet. Check logs.")
+                        had_error = True
                         
             except ImportError:
                 print("[NOTIFIER] WARN: 'src.notifier' module not found or dependencies missing.")
                 print("[NOTIFIER] Run: pip install gspread google-auth")
+                had_error = True
             except Exception as e:
                 print(f"[NOTIFIER] ERROR: Unexpected error during notification: {e}")
+                had_error = True
             
             # DB保存（評価機能用）
             try:
@@ -280,13 +287,23 @@ def analyze_market():
                 signal_date = latest_date.strftime('%Y-%m-%d')
                 saved_count = db.save_signals(formatted_signals, signal_date)
                 print(f"[DB] Saved {saved_count} signals to database.")
+                if saved_count != len(formatted_signals):
+                    print(
+                        f"[DB] ERROR: Saved {saved_count} of "
+                        f"{len(formatted_signals)} signals."
+                    )
+                    had_error = True
             except Exception as e:
                 print(f"[DB] ERROR: Failed to save signals: {e}")
+                had_error = True
                 
         else:
             print("\n[NOTIFIER] No signals to report. Skipping Sheet update.")
+        return 1 if had_error else 0
+
+    return 0
 
 
 if __name__ == "__main__":
-    analyze_market()
+    raise SystemExit(analyze_market())
 

@@ -74,8 +74,8 @@ def fetch_single_stock(ticker: str, code: str, start_date: str, end_date: str) -
                 'adjustmentfactor': adjustment_factor,
             })
         return results
-    except Exception:
-        return []
+    except Exception as exc:
+        raise RuntimeError(f"yfinance fetch failed for {code}: {exc}") from exc
 
 
 def fetch_yfinance_data(codes: list, start_date: str, end_date: str) -> pd.DataFrame:
@@ -159,7 +159,7 @@ def update_database(df: pd.DataFrame, db_path: Path) -> int:
     return count
 
 
-def run_daily_update():
+def run_daily_update() -> int:
     """日次更新を実行"""
     print("="*60)
     print(f"yfinance Daily Update - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
@@ -167,7 +167,7 @@ def run_daily_update():
     
     if not DB_PATH.exists():
         print(f"[ERROR] Database not found: {DB_PATH}")
-        return
+        return 1
     
     # 1. 対象銘柄を取得
     print("[INFO] Loading target codes from DB...")
@@ -176,7 +176,7 @@ def run_daily_update():
     
     if not codes:
         print("[ERROR] No target codes found.")
-        return
+        return 1
     
     # 2. 取得期間を設定（直近5営業日分を更新）
     end_date = datetime.now()
@@ -197,11 +197,16 @@ def run_daily_update():
     if not df.empty:
         count = update_database(df, DB_PATH)
         print(f"[INFO] Updated {count} records in database")
+        if count != len(df):
+            print(f"[ERROR] Updated {count} of {len(df)} fetched records")
+            return 1
     else:
-        print("[WARN] No data fetched")
+        print("[ERROR] No data fetched")
+        return 1
     
     print("="*60)
+    return 0
 
 
 if __name__ == "__main__":
-    run_daily_update()
+    raise SystemExit(run_daily_update())
