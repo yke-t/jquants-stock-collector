@@ -8,20 +8,16 @@ Usage:
 """
 
 import argparse
-import os
 import sys
-from dotenv import load_dotenv
 
 from src.client import JQuantsClient
 from src.collector import DataCollector
 from src.database import StockDatabase
+from src.settings import DATABASE_PATH, JQUANTS_API_KEY
 
 
 def main():
     """Main entry point"""
-    # Load environment variables
-    load_dotenv()
-    
     # Parse arguments
     parser = argparse.ArgumentParser(description="J-Quants Stock Data Collector")
     parser.add_argument(
@@ -39,7 +35,7 @@ def main():
     parser.add_argument(
         "--db", 
         type=str, 
-        default="stock_data.db",
+        default=str(DATABASE_PATH),
         help="Database file path (default: stock_data.db)"
     )
     parser.add_argument(
@@ -50,7 +46,7 @@ def main():
     args = parser.parse_args()
 
     # Check authentication (V2 uses API key)
-    api_key = os.getenv("JQUANTS_API_KEY") or os.getenv("JQUANTS_REFRESH_TOKEN")
+    api_key = JQUANTS_API_KEY
     
     if not api_key:
         print("Error: Set JQUANTS_API_KEY in .env")

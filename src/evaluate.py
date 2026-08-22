@@ -19,10 +19,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from src.settings import CHARTS_DIR, DATABASE_PATH, REPORTS_DIR
+from src.settings import GOOGLE_SERVICE_ACCOUNT_FILE, GOOGLE_SHEETS_SPREADSHEET_KEY
+
 # --- Config ---
-DB_PATH = Path(__file__).parent.parent / "stock_data.db"
-CHARTS_OUTPUT_DIR = Path(__file__).parent.parent / "charts"
-REPORTS_OUTPUT_DIR = Path(__file__).parent.parent / "reports"
+DB_PATH = DATABASE_PATH
+CHARTS_OUTPUT_DIR = CHARTS_DIR
+REPORTS_OUTPUT_DIR = REPORTS_DIR
 EVAL_DAYS = 20  # シグナル後N営業日で評価
 SIGNAL_PRICE_MIN_RATIO = 0.2
 SIGNAL_PRICE_MAX_RATIO = 5.0
@@ -827,12 +830,8 @@ def import_from_sheets():
         print("[ERROR] gspread not installed. Run: pip install gspread google-auth")
         return
     
-    default_secret_key_path = Path(__file__).parent.parent / "secret_key.json"
-    SECRET_KEY_PATH = Path(os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", str(default_secret_key_path)))
-    SPREADSHEET_KEY = os.getenv(
-        "GOOGLE_SHEETS_SPREADSHEET_KEY",
-        "1Hejm_UXA3xvn5rEXUhMkpHPtSjM2-foq-t1Su96gGYo",
-    )
+    SECRET_KEY_PATH = GOOGLE_SERVICE_ACCOUNT_FILE
+    SPREADSHEET_KEY = GOOGLE_SHEETS_SPREADSHEET_KEY
     
     SCOPES = [
         'https://www.googleapis.com/auth/spreadsheets.readonly',

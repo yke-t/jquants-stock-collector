@@ -1,0 +1,8 @@
+# Project-scoped Codex defaults. These settings load only after the repository
+# is trusted. Live API checks should be enabled explicitly for the task at hand.
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+model_reasoning_effort = "high"
+
+[sandbox_workspace_write]
+network_access = false

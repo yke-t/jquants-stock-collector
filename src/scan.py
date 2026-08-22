@@ -9,8 +9,10 @@ import numpy as np
 from pathlib import Path
 from datetime import datetime
 
+from src.settings import DATABASE_PATH
+
 # --- Config (Golden Configuration) ---
-DB_PATH = Path(__file__).parent.parent / "stock_data.db"
+DB_PATH = DATABASE_PATH
 DIP_THRESHOLD = 0.97       # 押し目
 MARKET_BULLISH_THRESHOLD = 0.40  # 市場環境フィルター
 REBOUND_GUARD_MA25_THRESHOLD = -8.0  # これ以下のMA25乖離はENTRY→WATCHに降格

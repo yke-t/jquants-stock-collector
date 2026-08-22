@@ -9,11 +9,13 @@ import os
 import json
 from pathlib import Path
 
+from src.settings import DATABASE_PATH
+
 
 class StockDatabase:
     """SQLiteデータベース操作クラス"""
     
-    def __init__(self, db_path="stock_data.db"):
+    def __init__(self, db_path=DATABASE_PATH):
         """
         データベースを初期化
         

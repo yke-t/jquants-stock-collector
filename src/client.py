@@ -10,9 +10,10 @@ V2 エンドポイント:
 - 財務情報: /v2/fins/summary
 """
 
-import os
 import requests
 import time
+
+from src.settings import JQUANTS_API_KEY
 
 
 class JQuantsClient:
@@ -24,7 +25,7 @@ class JQuantsClient:
     def __init__(self):
         """環境変数からAPIキーを取得してクライアントを初期化"""
         # V2ではAPIキーを使用（環境変数名は互換性のため両方サポート）
-        self.api_key = os.getenv("JQUANTS_API_KEY") or os.getenv("JQUANTS_REFRESH_TOKEN")
+        self.api_key = JQUANTS_API_KEY
         
         if not self.api_key:
             raise ValueError(

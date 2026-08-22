@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.client import JQuantsClient
 from src.database import StockDatabase
+from src.settings import DATABASE_PATH
 
 
 FIELD_ALIASES = {
@@ -224,7 +225,7 @@ def main():
     load_dotenv()
 
     parser = argparse.ArgumentParser(description="Collect J-Quants financial summary for dividend scans")
-    parser.add_argument("--db", default="stock_data.db", help="Database file path")
+    parser.add_argument("--db", default=str(DATABASE_PATH), help="Database file path")
     parser.add_argument("--code", default=None, help="Optional stock code")
     parser.add_argument("--date", default=None, help="Optional disclosure date (YYYY-MM-DD)")
     parser.add_argument("--all-codes", action="store_true", help="Collect by iterating codes from fundamentals")

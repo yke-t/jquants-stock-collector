@@ -8,8 +8,10 @@ import numpy as np
 from tqdm import tqdm
 from pathlib import Path
 
+from src.settings import DATABASE_PATH
+
 # --- Config (The Safety First - Coward's Strategy) ---
-DB_PATH = Path(__file__).parent.parent / "stock_data.db"
+DB_PATH = DATABASE_PATH
 INITIAL_CAPITAL = 3000000  # 300万円
 
 # 防御最優先設定

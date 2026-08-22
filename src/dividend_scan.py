@@ -19,10 +19,11 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.database import StockDatabase
+from src.settings import DATABASE_PATH, REPORTS_DIR as PROJECT_REPORTS_DIR
 
 
-DB_PATH = Path(__file__).parent.parent / "stock_data.db"
-REPORTS_DIR = Path(__file__).parent.parent / "reports"
+DB_PATH = DATABASE_PATH
+REPORTS_DIR = PROJECT_REPORTS_DIR
 
 MIN_DIVIDEND_YIELD = 0.035
 HIGH_YIELD_RISK = 0.070

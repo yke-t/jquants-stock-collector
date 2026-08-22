@@ -21,14 +21,14 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+from src.settings import GOOGLE_CSE_API_KEY, GOOGLE_CSE_ID
+
 # Logging
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
 
 # --- Configuration ---
 # Google Custom Search API
-GOOGLE_CSE_API_KEY = os.getenv("GOOGLE_CSE_API_KEY", "")
-GOOGLE_CSE_ID = os.getenv("GOOGLE_CSE_ID", "")
 
 # Killer Keywords（悪材料検出用）
 KILLER_KEYWORDS = [

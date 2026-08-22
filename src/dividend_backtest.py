@@ -26,10 +26,11 @@ from src.dividend_scan import (
     add_price_indicators,
     classify_candidate,
 )
+from src.settings import DATABASE_PATH, REPORTS_DIR as PROJECT_REPORTS_DIR
 
 
-DB_PATH = Path(__file__).parent.parent / "stock_data.db"
-REPORTS_DIR = Path(__file__).parent.parent / "reports"
+DB_PATH = DATABASE_PATH
+REPORTS_DIR = PROJECT_REPORTS_DIR
 INDICATOR_LOOKBACK_DAYS = 420
 
 

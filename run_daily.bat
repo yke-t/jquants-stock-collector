@@ -6,6 +6,12 @@ cd /d %~dp0
 :: ログファイル名（追記モード）
 set LOGFILE=daily_operation.log
 set PYTHONIOENCODING=utf-8
+if exist ".venv\Scripts\python.exe" (
+    set "PYTHON=.venv\Scripts\python.exe"
+) else (
+    set "PYTHON=python"
+)
+
 
 :: データソース選択: jquants または yfinance
 :: J-Quants解約後は USE_YFINANCE=1 に変更してください
@@ -14,29 +20,27 @@ set USE_YFINANCE=1
 echo ======================================================== >> %LOGFILE%
 echo [START] Daily Routine: %date% %time% >> %LOGFILE%
 
-:: 1. Activate venv (もし仮想環境を使用している場合、remを外してパスを調整してください)
-:: call .venv\Scripts\activate.bat
 
 :: 2. Data Fetch
 echo [STEP 1] Fetching Market Data... >> %LOGFILE%
 if "%USE_YFINANCE%"=="1" (
     echo [INFO] Using yfinance data source >> %LOGFILE%
-    python -m src.update_yfinance >> %LOGFILE% 2>&1
+    "%PYTHON%" -m src.update_yfinance >> %LOGFILE% 2>&1
     if errorlevel 1 goto error
 ) else (
     echo [INFO] Using J-Quants data source >> %LOGFILE%
-    python main.py >> %LOGFILE% 2>&1
+    "%PYTHON%" main.py >> %LOGFILE% 2>&1
     if errorlevel 1 goto error
 )
 
 :: 3. Signal Scan (市場環境判定とシグナル生成)
 echo [STEP 2] Scanning Signals... >> %LOGFILE%
-python -m src.scan >> %LOGFILE% 2>&1
+"%PYTHON%" -m src.scan >> %LOGFILE% 2>&1
 if errorlevel 1 goto error
 
 :: 4. BigQuery Sync (差分更新)
 echo [STEP 3] Syncing to BigQuery... >> %LOGFILE%
-python -m src.sync_bigquery >> %LOGFILE% 2>&1
+"%PYTHON%" -m src.sync_bigquery >> %LOGFILE% 2>&1
 if errorlevel 1 goto error
 
 echo [END] Finished: %date% %time% >> %LOGFILE%

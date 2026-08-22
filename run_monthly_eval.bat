@@ -6,13 +6,19 @@ cd /d %~dp0
 :: ログファイル名（追記モード）
 set LOGFILE=monthly_evaluation.log
 set PYTHONIOENCODING=utf-8
+if exist ".venv\Scripts\python.exe" (
+    set "PYTHON=.venv\Scripts\python.exe"
+) else (
+    set "PYTHON=python"
+)
+
 
 echo ======================================================== >> %LOGFILE%
 echo [START] Monthly Strategy Evaluation: %date% %time% >> %LOGFILE%
 
 :: 先月分のシグナルパフォーマンスを評価し、チャートを生成
 echo [INFO] Running evaluation for the previous month... >> %LOGFILE%
-python -m src.evaluate --prev-month --charts >> %LOGFILE% 2>&1
+"%PYTHON%" -m src.evaluate --prev-month --charts >> %LOGFILE% 2>&1
 if errorlevel 1 goto error
 
 echo [END] Finished Monthly Evaluation: %date% %time% >> %LOGFILE%

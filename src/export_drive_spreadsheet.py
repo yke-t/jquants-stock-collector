@@ -17,10 +17,15 @@ from dotenv import load_dotenv
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.notifier import SPREADSHEET_KEY, get_sheets_client
+from src.settings import (
+    GOOGLE_DRIVE_EXPORT_SPREADSHEET_KEY,
+    GOOGLE_DRIVE_FOLDER_ID,
+    REPORTS_DIR as PROJECT_REPORTS_DIR,
+)
 
 
-REPORTS_DIR = Path(__file__).parent.parent / "reports"
-EXPORT_SPREADSHEET_KEY = os.getenv("GOOGLE_DRIVE_EXPORT_SPREADSHEET_KEY", SPREADSHEET_KEY)
+REPORTS_DIR = PROJECT_REPORTS_DIR
+EXPORT_SPREADSHEET_KEY = GOOGLE_DRIVE_EXPORT_SPREADSHEET_KEY or SPREADSHEET_KEY
 
 
 def read_csv_rows(csv_path: Path) -> List[List[str]]:
@@ -113,7 +118,7 @@ def main():
     )
     parser.add_argument(
         "--folder-id",
-        default=os.getenv("GOOGLE_DRIVE_FOLDER_ID"),
+        default=GOOGLE_DRIVE_FOLDER_ID,
         help="Optional Google Drive folder ID",
     )
     args = parser.parse_args()

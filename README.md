@@ -1,5 +1,76 @@
 # J-Quants Stock Data Collector
 
+J-Quantsとyfinanceから日本株データを収集し、SQLiteへ保存して、日次シグナル・長期配当候補・評価・バックテストを生成するローカル運用プロジェクトです。
+
+## Codexでの開始方法
+
+このリポジトリではCodexを開発・レビュー・診断の標準環境として扱います。最初に[AGENTS.md](AGENTS.md)と[Codex移行ガイド](docs/CODEX_MIGRATION.md)を確認してください。
+
+```powershell
+py -3.11 -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.lock.txt
+Copy-Item .env.example .env
+python scripts/verify_project.py
+python scripts/verify_project.py --with-db
+```
+
+- 実値は`.env`と`secret_key.json`へ置き、Gitへ追加しません。
+- Codexのプロジェクト設定は`.codex/config.toml`にあります。
+- 既定の検証はオフラインです。外部APIやGoogleサービスを使う検証は明示的に実行します。
+
+## 現在の主要フロー
+
+### 日次シグナル
+
+```powershell
+python -m src.update_yfinance
+python -m src.scan
+python -m src.sync_bigquery
+```
+
+Windows Task Scheduler用の入口は`run_daily.bat`です。
+
+### 長期配当候補
+
+```powershell
+python src/financial_collector.py --code 7203
+python src/dividend_scan.py --limit 50 --with-news
+python src/dividend_backtest.py --start 2025-01-01 --top-n 20
+```
+
+Google Sheets／Driveへの出力を含む入口は`run_dividend_daily.bat`です。
+
+### 評価
+
+```powershell
+python -m src.evaluate --prev-month --charts --report
+```
+
+## ディレクトリ
+
+```text
+main.py                     J-Quants株価収集CLI
+src/settings.py             .envを使う共通設定
+src/database.py             SQLiteスキーマと保存処理
+src/scan.py                 日次シグナル
+src/dividend_scan.py        長期配当候補
+src/dividend_backtest.py    配当戦略バックテスト
+src/notifier.py             Google Sheets出力
+src/sync_bigquery.py        BigQuery差分同期
+scripts/verify_project.py   Codex向けオフライン検証
+tests/                      ユニットテスト
+tests/integration/          明示実行する外部APIテスト
+```
+
+## 運用上の注意
+
+配当スキャナと配当バックテストには、株式分割時の株価と1株指標の基準を統一する未解決課題があります。ユニットテストが成功しても、分割影響銘柄を含む結果を運用可能とは扱いません。
+
+また、配当財務の日次同期は現在`--missing-only`で、取得済み銘柄を継続更新しません。これらの修正と実データ回帰確認が完了するまでは、配当結果を参考値として扱ってください。
+
+## Legacy collector quickstart
+
 J-Quants API (Premium Plan) を使用して、日本株の過去データを収集しSQLiteデータベースに保存するスクリプトです。
 
 ## 機能

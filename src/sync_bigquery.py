@@ -14,11 +14,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from src.settings import BQ_DATASET, BQ_TABLE_PRICES, DATABASE_PATH, GCP_PROJECT_ID
+
 # --- Config ---
-DB_PATH = Path(__file__).parent.parent / "stock_data.db"
-GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "nisa-jquant")
-BQ_DATASET = os.getenv("BQ_DATASET", "stock_data")
-BQ_TABLE_PRICES = os.getenv("BQ_TABLE_PRICES", "prices")
+DB_PATH = DATABASE_PATH
 SYNC_DAYS = 1  # 直近1日分を同期（前日分）
 
 

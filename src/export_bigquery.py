@@ -19,14 +19,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from src.settings import (
+    BQ_DATASET,
+    BQ_TABLE_FUNDAMENTALS,
+    BQ_TABLE_PRICES,
+    DATABASE_PATH,
+    GCP_PROJECT_ID,
+)
+
 # --- Config ---
-DB_PATH = Path(__file__).parent.parent / "stock_data.db"
+DB_PATH = DATABASE_PATH
 
 # BigQuery設定（ユーザーが設定）
-GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "nisa-jquant")  # GCPプロジェクトID
-BQ_DATASET = os.getenv("BQ_DATASET", "stock_data")           # データセット名
-BQ_TABLE_PRICES = os.getenv("BQ_TABLE_PRICES", "prices")          # 株価テーブル
-BQ_TABLE_FUNDAMENTALS = os.getenv("BQ_TABLE_FUNDAMENTALS", "fundamentals")  # 銘柄マスタテーブル
 
 
 def export_to_csv():

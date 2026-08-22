@@ -17,17 +17,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from src.settings import (
+    GOOGLE_SERVICE_ACCOUNT_FILE,
+    GOOGLE_SHEETS_SPREADSHEET_KEY,
+)
+
 # --- Configuration ---
 # 認証キーはプロジェクトルートに配置することを想定
-DEFAULT_SECRET_KEY_PATH = Path(__file__).parent.parent / "secret_key.json"
-SECRET_KEY_PATH = Path(os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", str(DEFAULT_SECRET_KEY_PATH)))
-
-# デフォルト設定（呼び出し元で上書き可能だが、基本はここを修正）
-# 注意: 共有設定したスプレッドシートのIDをここに設定してください
-SPREADSHEET_KEY = os.getenv(
-    "GOOGLE_SHEETS_SPREADSHEET_KEY",
-    "1Hejm_UXA3xvn5rEXUhMkpHPtSjM2-foq-t1Su96gGYo",
-)
+SECRET_KEY_PATH = GOOGLE_SERVICE_ACCOUNT_FILE
+SPREADSHEET_KEY = GOOGLE_SHEETS_SPREADSHEET_KEY
 
 def get_sheet_name() -> str:
     """日付入りのシート名を生成する（例: Signals_20260120）"""

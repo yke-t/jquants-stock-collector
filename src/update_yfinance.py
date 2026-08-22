@@ -12,8 +12,10 @@ from datetime import datetime, timedelta
 from tqdm import tqdm
 import time
 
+from src.settings import DATABASE_PATH
+
 # --- Config ---
-DB_PATH = Path(__file__).parent.parent / "stock_data.db"
+DB_PATH = DATABASE_PATH
 BATCH_SIZE = 20  # 一度に取得する銘柄数（レートリミット対策）
 WAIT_BETWEEN_BATCHES = 3  # バッチ間の待機秒数
 

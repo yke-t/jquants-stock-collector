@@ -16,8 +16,10 @@ from tqdm import tqdm
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from src.settings import DATABASE_PATH
+
 # --- Config ---
-DB_PATH = Path(__file__).parent.parent / "stock_data.db"
+DB_PATH = DATABASE_PATH
 
 # TODO: Premium Plan契約後、market_capでフィルタリングに戻す
 # MIN_CAP = 5e9   # 50億円
