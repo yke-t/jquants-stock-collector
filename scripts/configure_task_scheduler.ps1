@@ -3,13 +3,17 @@
 
 [CmdletBinding()]
 param(
-    [string]$RepositoryRoot = (Split-Path -Parent $PSScriptRoot),
+    [string]$RepositoryRoot,
     [string]$BackupDirectory,
     [string]$ResultPath
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
+    $RepositoryRoot = Split-Path -Parent $PSScriptRoot
+}
 
 $dailyTaskName = "NISA-JQuant Daily"
 $dividendTaskName = "NISA-JQuant Dividend Daily"
