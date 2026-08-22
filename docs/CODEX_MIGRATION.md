@@ -4,8 +4,7 @@
 
 Codex is the primary environment for source changes, review, local tests, and
 evidence-backed diagnostics. The market-data pipeline remains deterministic
-Python invoked by Windows Task Scheduler until its operational blockers are
-fixed and revalidated.
+Python invoked from the main checkout by Windows Task Scheduler.
 
 ## Local setup
 
@@ -33,9 +32,28 @@ or BigQuery.
 
 ## Scheduling policy
 
-Keep `run_daily.bat` and `run_dividend_daily.bat` under Windows Task Scheduler
-for now. A Codex scheduled task may monitor logs or summarize failures, but it
-must not be the only mechanism running the trading-data pipeline yet.
+Keep `run_daily.bat`, `run_dividend_daily.bat`, and `run_monthly_eval.bat`
+under Windows Task Scheduler. A Codex scheduled task may monitor logs or
+summarize failures, but it must not be the only mechanism running the
+trading-data pipeline.
+
+Run the repository-managed configuration script from an administrator
+PowerShell to install or reconcile the task definitions:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\configure_task_scheduler.ps1
+```
+
+The script configures these local tasks without starting any workflow:
+
+- `NISA-JQuant Daily`: Monday through Friday at 17:00.
+- `NISA-JQuant Dividend Daily`: Monday through Friday at 18:00.
+- `SnowMoney_Monthly_Eval`: retained without modification.
+
+Before changing a definition, the script exports the affected tasks beneath
+the current user's `Documents\Codex Backups\jquants-stock-collector`
+directory. It also preserves the daily task's principal, power policy, and
+`IgnoreNew` behavior for the dividend task.
 
 Codex worktrees do not automatically contain ignored files such as
 `stock_data.db`, `.env`, or `secret_key.json`. Use the main local checkout for
@@ -59,6 +77,7 @@ before adopting worktree-based scheduled execution.
   allowing Task Scheduler to stop instead of exporting stale artifacts.
 - Live integration tests are not part of the offline unit suite.
 
-Until the factor backfill and remaining items are validated with real outputs,
-report the pipeline as locally executable with split-sensitive names safely
-blocked, but not yet fully operational.
+The split-sensitive dividend paths and external output paths have been
+revalidated with live outputs. Future operational changes still require an
+actual command result, relevant DB rows or dates, and produced-artifact checks;
+offline tests alone are not sufficient evidence.
