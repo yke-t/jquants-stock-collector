@@ -47,8 +47,9 @@ before adopting worktree-based scheduled execution.
 - Dividend scans and backtests now multiply per-share financial values by
   explicit point-in-time adjustment factors. Large price discontinuities with
   no factor are blocked as `DATA_WARNING` instead of being normalized by
-  inference. The local DB still needs an explicit factor backfill for known
-  cases such as `20030` and `19610`.
+  inference. `src/split_factor_backfill.py` provides a guarded dry-run/apply
+  workflow for each ignored local DB: it verifies a SQLite backup and matching
+  target rows before applying exact J-Quants repairs in one transaction.
 - The recurring dividend sync uses `--missing-only`, so already-covered stocks
   are not refreshed.
 - Several external-operation failures are logged without a non-zero process

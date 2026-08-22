@@ -56,6 +56,7 @@ src/database.py             SQLiteスキーマと保存処理
 src/scan.py                 日次シグナル
 src/dividend_scan.py        長期配当候補
 src/dividend_backtest.py    配当戦略バックテスト
+src/split_factor_backfill.py 株式分割時の限定価格修復・係数補完
 src/notifier.py             Google Sheets出力
 src/sync_bigquery.py        BigQuery差分同期
 scripts/verify_project.py   Codex向けオフライン検証
@@ -65,7 +66,7 @@ tests/integration/          明示実行する外部APIテスト
 
 ## 運用上の注意
 
-配当スキャナと配当バックテストは、明示的な`adjustmentfactor`がある場合だけ1株指標を同じ株数基準へ補正します。大きな価格断絶に係数がない銘柄は、推測で補正せず`DATA_WARNING`として利回り計算から除外します。既知例`20030`・`19610`は現在この安全側判定になっており、運用再開には調整係数のバックフィルと再検証が必要です。
+配当スキャナと配当バックテストは、明示的な`adjustmentfactor`がある場合だけ1株指標を同じ株数基準へ補正します。大きな価格断絶に係数がない銘柄は、推測で補正せず`DATA_WARNING`として利回り計算から除外します。`src/split_factor_backfill.py`は、J-Quants原値のドライラン照合、更新対象とバックアップの一致確認、限定価格修復・係数補完を1トランザクションで行います。各ローカルDBは個別にバックアップしたうえで適用し、`python scripts/verify_project.py --with-db`で再検証してください。
 
 また、配当財務の日次同期は現在`--missing-only`で、取得済み銘柄を継続更新しません。これらの修正と実データ回帰確認が完了するまでは、配当結果を参考値として扱ってください。
 

@@ -21,6 +21,7 @@ UNIT_TEST_MODULES = [
     "tests.test_evaluate",
     "tests.test_settings",
     "tests.test_update_yfinance",
+    "tests.test_split_factor_backfill",
 ]
 REQUIRED_TABLES = {
     "prices",

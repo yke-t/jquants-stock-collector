@@ -70,13 +70,19 @@ class JQuantsClient:
         """銘柄一覧を取得 (V2: /equities/master)"""
         return self.get("/equities/master")
     
-    def get_daily_quotes(self, date=None, code=None):
+    def get_daily_quotes(self, date=None, code=None, from_date=None, to_date=None):
         """日足データを取得 (V2: /equities/bars/daily)"""
+        if date and (from_date or to_date):
+            raise ValueError("date cannot be combined with from_date or to_date")
         params = {}
         if date:
             params["date"] = date
         if code:
             params["code"] = code
+        if from_date:
+            params["from"] = from_date
+        if to_date:
+            params["to"] = to_date
         return self.get("/equities/bars/daily", params=params)
     
     def get_financial_summary(self, code=None, date=None):
