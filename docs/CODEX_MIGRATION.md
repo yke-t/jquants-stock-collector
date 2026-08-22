@@ -53,7 +53,11 @@ The script configures these local tasks without starting any workflow:
 Before changing a definition, the script exports the affected tasks beneath
 the current user's `Documents\Codex Backups\jquants-stock-collector`
 directory. It also preserves the daily task's principal, power policy, and
-`IgnoreNew` behavior for the dividend task.
+`IgnoreNew` behavior for the dividend task. If the existing daily task stores
+Windows credentials for unattended execution, the script prompts once for the
+Windows account password (not a Windows Hello PIN). The password is passed
+only to Windows Task Scheduler and is never written to the backup or result
+files.
 
 Codex worktrees do not automatically contain ignored files such as
 `stock_data.db`, `.env`, or `secret_key.json`. Use the main local checkout for

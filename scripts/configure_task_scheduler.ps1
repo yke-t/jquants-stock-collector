@@ -5,7 +5,8 @@
 param(
     [string]$RepositoryRoot,
     [string]$BackupDirectory,
-    [string]$ResultPath
+    [string]$ResultPath,
+    [PSCredential]$Credential
 )
 
 Set-StrictMode -Version Latest
@@ -84,6 +85,21 @@ if ($dailyTask.Actions.Count -ne 1 -or $dailyTask.Actions[0].Execute -ne $dailyB
     throw "Unexpected action on '$dailyTaskName'; refusing to modify it."
 }
 
+$usesStoredPassword = [string]$dailyTask.Principal.LogonType -eq "Password"
+$schedulerUser = [string]$dailyTask.Principal.UserId
+$schedulerPassword = $null
+if ($usesStoredPassword) {
+    if ($null -eq $Credential) {
+        $Credential = Get-Credential `
+            -UserName $schedulerUser `
+            -Message "Enter the Windows account password used by '$dailyTaskName'. Do not use a Windows Hello PIN."
+    }
+    if ($null -eq $Credential) {
+        throw "Windows credentials are required to update the password-backed scheduled task."
+    }
+    $schedulerPassword = $Credential.GetNetworkCredential().Password
+}
+
 $monthlyTask = Get-ScheduledTask -TaskName $monthlyTaskName
 $existingDividendTask = Get-ScheduledTask -TaskName $dividendTaskName -ErrorAction SilentlyContinue
 if ($null -ne $existingDividendTask) {
@@ -114,16 +130,44 @@ $dividendAction = New-ScheduledTaskAction `
     -Execute $dividendBatch `
     -WorkingDirectory $workingDirectory
 
+$dailyChanged = $false
+$dividendChanged = $false
 try {
-    Set-ScheduledTask -TaskName $dailyTaskName -Trigger $dailyTrigger | Out-Null
-    Register-ScheduledTask `
-        -TaskName $dividendTaskName `
-        -Action $dividendAction `
-        -Trigger $dividendTrigger `
-        -Settings $dailyTask.Settings `
-        -Principal $dailyTask.Principal `
-        -Description "Runs the dividend workflow on weekdays after the daily workflow." `
-        -Force | Out-Null
+    if ($usesStoredPassword) {
+        Set-ScheduledTask `
+            -TaskName $dailyTaskName `
+            -Trigger $dailyTrigger `
+            -User $schedulerUser `
+            -Password $schedulerPassword | Out-Null
+    }
+    else {
+        Set-ScheduledTask -TaskName $dailyTaskName -Trigger $dailyTrigger | Out-Null
+    }
+    $dailyChanged = $true
+
+    if ($usesStoredPassword) {
+        Register-ScheduledTask `
+            -TaskName $dividendTaskName `
+            -Action $dividendAction `
+            -Trigger $dividendTrigger `
+            -Settings $dailyTask.Settings `
+            -User $schedulerUser `
+            -Password $schedulerPassword `
+            -RunLevel $dailyTask.Principal.RunLevel `
+            -Description "Runs the dividend workflow on weekdays after the daily workflow." `
+            -Force | Out-Null
+    }
+    else {
+        Register-ScheduledTask `
+            -TaskName $dividendTaskName `
+            -Action $dividendAction `
+            -Trigger $dividendTrigger `
+            -Settings $dailyTask.Settings `
+            -Principal $dailyTask.Principal `
+            -Description "Runs the dividend workflow on weekdays after the daily workflow." `
+            -Force | Out-Null
+    }
+    $dividendChanged = $true
 
     $dailySummary = Get-TaskScheduleSummary -TaskName $dailyTaskName
     $dividendSummary = Get-TaskScheduleSummary -TaskName $dividendTaskName
@@ -165,14 +209,37 @@ catch {
     $failureMessage = $_.Exception.Message
     $rollbackMessage = $null
     try {
-        Register-ScheduledTask -TaskName $dailyTaskName -Xml $dailyXmlBefore -Force | Out-Null
-        if ($null -ne $dividendXmlBefore) {
-            Register-ScheduledTask -TaskName $dividendTaskName -Xml $dividendXmlBefore -Force | Out-Null
+        if ($null -ne $dividendXmlBefore -and $dividendChanged) {
+            if ($usesStoredPassword) {
+                Register-ScheduledTask `
+                    -TaskName $dividendTaskName `
+                    -Xml $dividendXmlBefore `
+                    -User $schedulerUser `
+                    -Password $schedulerPassword `
+                    -Force | Out-Null
+            }
+            else {
+                Register-ScheduledTask -TaskName $dividendTaskName -Xml $dividendXmlBefore -Force | Out-Null
+            }
         }
-        else {
+        elseif ($null -eq $dividendXmlBefore) {
             $createdDividendTask = Get-ScheduledTask -TaskName $dividendTaskName -ErrorAction SilentlyContinue
             if ($null -ne $createdDividendTask) {
                 Unregister-ScheduledTask -TaskName $dividendTaskName -Confirm:$false
+            }
+        }
+
+        if ($dailyChanged) {
+            if ($usesStoredPassword) {
+                Register-ScheduledTask `
+                    -TaskName $dailyTaskName `
+                    -Xml $dailyXmlBefore `
+                    -User $schedulerUser `
+                    -Password $schedulerPassword `
+                    -Force | Out-Null
+            }
+            else {
+                Register-ScheduledTask -TaskName $dailyTaskName -Xml $dailyXmlBefore -Force | Out-Null
             }
         }
     }
@@ -193,4 +260,7 @@ catch {
         throw "Task configuration failed: $failureMessage Rollback also failed: $rollbackMessage"
     }
     throw "Task configuration failed and was rolled back: $failureMessage"
+}
+finally {
+    $schedulerPassword = $null
 }
