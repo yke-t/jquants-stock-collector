@@ -50,8 +50,10 @@ before adopting worktree-based scheduled execution.
   inference. `src/split_factor_backfill.py` provides a guarded dry-run/apply
   workflow for each ignored local DB: it verifies a SQLite backup and matching
   target rows before applying exact J-Quants repairs in one transaction.
-- The recurring dividend sync uses `--missing-only`, so already-covered stocks
-  are not refreshed.
+- The recurring dividend sync rotates through missing and stale codes with
+  `--stale-days 7 --limit 500`, oldest refresh first. Successful empty
+  responses are recorded in `sync_progress` so no-data codes do not starve the
+  queue.
 - Several external-operation failures are logged without a non-zero process
   exit code.
 - Live integration tests are not part of the offline unit suite.

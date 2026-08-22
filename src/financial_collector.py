@@ -10,7 +10,8 @@ import json
 import sys
 import sqlite3
 import time
-from datetime import datetime
+from contextlib import closing
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
@@ -101,6 +102,11 @@ FIELD_ALIASES = {
         "total_assets",
     ],
 }
+DIVIDEND_SYNC_KEY_PREFIX = "dividend_financials:"
+
+
+def dividend_sync_key(code: str) -> str:
+    return f"{DIVIDEND_SYNC_KEY_PREFIX}{code}"
 
 
 def first_present(row: Dict[str, Any], names: Iterable[str]) -> Any:
@@ -173,27 +179,67 @@ def load_codes_from_db(
     db_path: str,
     limit: Optional[int] = None,
     missing_only: bool = False,
+    stale_before: Optional[str] = None,
 ) -> List[str]:
-    query = """
-    SELECT DISTINCT f.code
-    FROM fundamentals f
-    WHERE f.code IS NOT NULL
-    """
-    if missing_only:
-        query += """
-        AND NOT EXISTS (
-            SELECT 1
-            FROM dividend_financials df
-            WHERE df.code = f.code
+    if missing_only and stale_before:
+        raise ValueError("missing_only and stale_before cannot be combined")
+
+    params: List[Any] = []
+    if missing_only or stale_before:
+        query = """
+        WITH code_refresh AS (
+            SELECT
+                f.code,
+                MAX(NULLIF(df.updated_at, '')) AS last_updated,
+                MAX(NULLIF(sp.last_synced_date, '')) AS last_attempted
+            FROM fundamentals f
+            LEFT JOIN dividend_financials df ON df.code = f.code
+            LEFT JOIN sync_progress sp
+              ON sp.table_name = ? || f.code
+            WHERE f.code IS NOT NULL
+            GROUP BY f.code
+        ), refresh_order AS (
+            SELECT
+                code,
+                last_updated,
+                CASE
+                    WHEN last_attempted IS NULL THEN last_updated
+                    WHEN last_updated IS NULL THEN last_attempted
+                    WHEN last_attempted >= last_updated THEN last_attempted
+                    ELSE last_updated
+                END AS last_refreshed
+            FROM code_refresh
         )
+        SELECT code, last_refreshed
+        FROM refresh_order
         """
-    query += " ORDER BY f.code"
+        params.append(DIVIDEND_SYNC_KEY_PREFIX)
+        if missing_only:
+            query += " WHERE last_updated IS NULL"
+        else:
+            query += """
+            WHERE last_refreshed IS NULL OR last_refreshed < ?
+            """
+            params.append(str(stale_before))
+        query += """
+        ORDER BY
+            CASE WHEN last_refreshed IS NULL THEN 0 ELSE 1 END,
+            last_refreshed,
+            code
+        """
+    else:
+        query = """
+        SELECT DISTINCT f.code
+        FROM fundamentals f
+        WHERE f.code IS NOT NULL
+        ORDER BY f.code
+        """
     if limit:
         query += f" LIMIT {int(limit)}"
 
     StockDatabase(db_path)
-    with sqlite3.connect(db_path) as conn:
-        rows = conn.execute(query).fetchall()
+    with closing(sqlite3.connect(db_path)) as conn:
+        rows = conn.execute(query, params).fetchall()
     return [str(row[0]) for row in rows]
 
 
@@ -208,6 +254,10 @@ def collect_for_codes(
         try:
             saved = collect_financial_summary(client, db, code=code)
             total_saved += saved
+            db.update_sync_progress(
+                dividend_sync_key(code),
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            )
             print(f"[{idx}/{len(codes)}] {code}: saved {saved}")
         except Exception as e:
             print(f"[WARN] {code}: {e}")
@@ -229,9 +279,20 @@ def main():
     parser.add_argument("--all-codes", action="store_true", help="Collect by iterating codes from fundamentals")
     parser.add_argument("--limit", type=int, default=None, help="Limit codes when using --all-codes")
     parser.add_argument("--missing-only", action="store_true", help="Collect only codes missing from dividend_financials")
+    parser.add_argument(
+        "--stale-days",
+        type=int,
+        default=None,
+        help="Collect missing codes and codes not refreshed within this many days",
+    )
     parser.add_argument("--sleep", type=float, default=0.2, help="Sleep seconds between code requests")
     parser.add_argument("--show-fields", action="store_true", help="Print response keys and first row fields")
     args = parser.parse_args()
+
+    if args.missing_only and args.stale_days is not None:
+        parser.error("--missing-only and --stale-days cannot be combined")
+    if args.stale_days is not None and args.stale_days < 0:
+        parser.error("--stale-days must be zero or greater")
 
     client = JQuantsClient()
     db = StockDatabase(args.db)
@@ -246,7 +307,23 @@ def main():
         return
 
     if args.all_codes:
-        codes = load_codes_from_db(args.db, limit=args.limit, missing_only=args.missing_only)
+        stale_before = None
+        if args.stale_days is not None:
+            stale_before = (
+                datetime.now() - timedelta(days=args.stale_days)
+            ).strftime("%Y-%m-%d %H:%M:%S")
+        codes = load_codes_from_db(
+            args.db,
+            limit=args.limit,
+            missing_only=args.missing_only,
+            stale_before=stale_before,
+        )
+        mode = (
+            "missing-only" if args.missing_only
+            else f"stale-before={stale_before}" if stale_before
+            else "all-codes"
+        )
+        print(f"[INFO] Selected {len(codes)} code(s): {mode}")
         saved = collect_for_codes(client, db, codes, sleep_seconds=args.sleep)
     elif args.code or args.date:
         saved = collect_financial_summary(client, db, code=args.code, date=args.date)

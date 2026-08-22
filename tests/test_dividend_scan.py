@@ -135,6 +135,30 @@ class DividendScanClassificationTest(unittest.TestCase):
         self.assertEqual(annotated.iloc[0]["share_basis_status"], "VERIFIED")
         self.assertEqual(annotated.iloc[0]["share_basis_factor"], 0.25)
 
+    def test_known_20030_financial_after_split_stays_on_current_basis(self):
+        prices = pd.DataFrame([
+            {"date": "2026-03-27", "code": "20030", "close": 7510.0, "adjustmentfactor": None},
+            {"date": "2026-03-30", "code": "20030", "close": 1885.0, "adjustmentfactor": 0.25},
+            {"date": "2026-08-21", "code": "20030", "close": 1821.0, "adjustmentfactor": None},
+        ])
+        candidates = pd.DataFrame([{
+            "code": "20030",
+            "disclosure_date": "2026-05-07",
+        }])
+
+        annotated = annotate_share_basis(
+            prices,
+            candidates,
+            pd.Timestamp("2026-08-21"),
+        )
+
+        self.assertEqual(annotated.iloc[0]["share_basis_status"], "VERIFIED")
+        self.assertEqual(annotated.iloc[0]["share_basis_factor"], 1.0)
+        self.assertEqual(
+            annotated.iloc[0]["share_basis_reason"],
+            "no post-disclosure adjustment event",
+        )
+
     def test_known_19610_gap_without_factor_is_not_guessed_over(self):
         prices = pd.DataFrame([
             {"date": "2026-04-20", "code": "19610", "close": 7060.0, "adjustmentfactor": None},

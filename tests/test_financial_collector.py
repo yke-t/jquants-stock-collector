@@ -1,11 +1,18 @@
 # -*- coding: utf-8 -*-
 import sys
+import sqlite3
+import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.financial_collector import normalize_financial_row
+from src.financial_collector import (
+    collect_for_codes,
+    load_codes_from_db,
+    normalize_financial_row,
+)
 
 
 class FinancialCollectorNormalizeTest(unittest.TestCase):
@@ -47,6 +54,116 @@ class FinancialCollectorNormalizeTest(unittest.TestCase):
 
         self.assertIsNone(row["dividend_per_share"])
         self.assertIsNone(row["forecast_dividend_per_share"])
+
+
+class FinancialCollectorSchedulingTest(unittest.TestCase):
+    def test_stale_selection_prioritizes_missing_then_oldest(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "financials.db"
+            with closing(sqlite3.connect(db_path)) as connection:
+                connection.execute("CREATE TABLE fundamentals (code TEXT)")
+                connection.execute("""
+                    CREATE TABLE dividend_financials (
+                        code TEXT NOT NULL,
+                        disclosure_date TEXT NOT NULL,
+                        fiscal_year TEXT,
+                        period TEXT,
+                        dividend_per_share REAL,
+                        forecast_dividend_per_share REAL,
+                        eps REAL,
+                        forecast_eps REAL,
+                        profit REAL,
+                        equity REAL,
+                        total_assets REAL,
+                        raw_json TEXT,
+                        updated_at TEXT,
+                        PRIMARY KEY (code, disclosure_date, period)
+                    )
+                """)
+                connection.execute("""
+                    CREATE TABLE sync_progress (
+                        table_name TEXT PRIMARY KEY,
+                        last_synced_date TEXT
+                    )
+                """)
+                connection.executemany(
+                    "INSERT INTO fundamentals VALUES (?)",
+                    [("10010",), ("10020",), ("10030",), ("10040",)],
+                )
+                connection.executemany(
+                    """INSERT INTO dividend_financials
+                       (code, disclosure_date, period, updated_at)
+                       VALUES (?, ?, ?, ?)""",
+                    [
+                        ("10020", "2026-01-01", "FY", "2026-08-01 00:00:00"),
+                        ("10030", "2026-01-01", "FY", "2026-08-20 00:00:00"),
+                        ("10040", "2026-01-01", "FY", ""),
+                    ],
+                )
+                connection.execute(
+                    "INSERT INTO sync_progress VALUES (?, ?)",
+                    ("dividend_financials:10040", "2026-08-20 00:00:00"),
+                )
+                connection.commit()
+
+            codes = load_codes_from_db(
+                str(db_path),
+                limit=3,
+                stale_before="2026-08-15 00:00:00",
+            )
+
+        self.assertEqual(codes, ["10010", "10020"])
+
+    def test_missing_only_remains_available_for_manual_use(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "financials.db"
+            with closing(sqlite3.connect(db_path)) as connection:
+                connection.execute("CREATE TABLE fundamentals (code TEXT)")
+                connection.executemany(
+                    "INSERT INTO fundamentals VALUES (?)",
+                    [("10010",), ("10020",)],
+                )
+                connection.commit()
+
+            codes = load_codes_from_db(
+                str(db_path), limit=10, missing_only=True
+            )
+
+        self.assertEqual(codes, ["10010", "10020"])
+
+    def test_rejects_conflicting_refresh_modes(self):
+        with self.assertRaisesRegex(ValueError, "cannot be combined"):
+            load_codes_from_db(
+                "unused.db",
+                missing_only=True,
+                stale_before="2026-08-15 00:00:00",
+            )
+
+    def test_successful_empty_response_advances_sync_progress(self):
+        class EmptyClient:
+            def get_financial_summary(self, code=None, date=None):
+                return {"data": []}
+
+        class RecordingDatabase:
+            def __init__(self):
+                self.progress = []
+
+            def save_dividend_financials(self, rows):
+                self.saved_rows = rows
+                return len(rows)
+
+            def update_sync_progress(self, table_name, synced_date):
+                self.progress.append((table_name, synced_date))
+
+        db = RecordingDatabase()
+
+        saved = collect_for_codes(
+            EmptyClient(), db, ["13050"], sleep_seconds=0
+        )
+
+        self.assertEqual(saved, 0)
+        self.assertEqual(len(db.progress), 1)
+        self.assertEqual(db.progress[0][0], "dividend_financials:13050")
 
 
 if __name__ == "__main__":

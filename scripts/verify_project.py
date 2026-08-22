@@ -158,6 +158,10 @@ def check_database() -> bool:
         return False
 
     candidates = annotate_share_basis(prices, candidates, prices["date"].max())
+    split_events = {
+        "20030": (pd.Timestamp("2026-03-30"), 0.25),
+        "19610": (pd.Timestamp("2026-04-28"), 1.0 / 3.0),
+    }
     for _, candidate in candidates.iterrows():
         result = classify_candidate(candidate)
         code = candidate["code"]
@@ -167,11 +171,22 @@ def check_database() -> bool:
             if result["verdict"] != "DATA_WARNING" or result["dividend_yield"] is not None:
                 print(f"[FAIL] {code} unverified share basis was not blocked")
                 return False
-        elif factor == 1.0 or result["dividend_yield"] is None:
-            print(f"[FAIL] {code} verified split was not normalized")
-            return False
+        else:
+            event_date, event_factor = split_events[code]
+            disclosure_date = pd.Timestamp(candidate["disclosure_date"])
+            expected_factor = event_factor if disclosure_date < event_date else 1.0
+            if abs(factor - expected_factor) > 1e-9:
+                print(
+                    f"[FAIL] {code} factor={factor:g}, "
+                    f"expected={expected_factor:g} for disclosure={disclosure_date.date()}"
+                )
+                return False
+            if result["dividend_yield"] is None:
+                print(f"[FAIL] {code} verified share basis has no dividend yield")
+                return False
         print(
             f"[OK] split regression code={code} status={status} "
+            f"disclosure={pd.Timestamp(candidate['disclosure_date']).date()} "
             f"factor={factor:g} verdict={result['verdict']} "
             f"yield={result['dividend_yield']} reason={candidate['share_basis_reason']}"
         )

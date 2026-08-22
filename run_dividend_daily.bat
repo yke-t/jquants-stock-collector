@@ -15,7 +15,7 @@ echo ======================================================== >> %LOGFILE%
 echo [START] Dividend Routine: %date% %time% >> %LOGFILE%
 
 echo [STEP 1] Syncing dividend financials... >> %LOGFILE%
-"%PYTHON%" src\financial_collector.py --all-codes --missing-only --limit 500 --sleep 0.2 >> %LOGFILE% 2>&1
+"%PYTHON%" src\financial_collector.py --all-codes --stale-days 7 --limit 500 --sleep 0.2 >> %LOGFILE% 2>&1
 if errorlevel 1 goto error
 
 echo [STEP 2] Scanning dividend candidates... >> %LOGFILE%
