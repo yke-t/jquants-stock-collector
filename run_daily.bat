@@ -2,6 +2,12 @@
 setlocal
 cd /d %~dp0
 
+if "%JQUANTS_PIPELINE_LOCK_HELD%"=="1" goto run_workflow
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\run_with_lock.ps1" -CommandPath "%~f0" -LogPath "%~dp0daily_operation.log"
+exit /b %ERRORLEVEL%
+
+:run_workflow
+
 :: --- Config ---
 :: ログファイル名（追記モード）
 set LOGFILE=daily_operation.log

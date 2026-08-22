@@ -2,6 +2,12 @@
 setlocal
 cd /d %~dp0
 
+if "%JQUANTS_PIPELINE_LOCK_HELD%"=="1" goto run_workflow
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\run_with_lock.ps1" -CommandPath "%~f0" -LogPath "%~dp0dividend_operation.log"
+exit /b %ERRORLEVEL%
+
+:run_workflow
+
 set LOGFILE=dividend_operation.log
 set PYTHONIOENCODING=utf-8
 if exist ".venv\Scripts\python.exe" (

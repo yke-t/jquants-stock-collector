@@ -50,6 +50,18 @@ The script configures these local tasks without starting any workflow:
 - `NISA-JQuant Dividend Daily`: Monday through Friday at 18:00.
 - `SnowMoney_Monthly_Eval`: retained without modification.
 
+All three batch entry points delegate their outer invocation to
+`scripts\run_with_lock.ps1`. The runner uses one global Windows named mutex so
+manual launches and different scheduled workflows cannot run concurrently. A
+contending launch does not start the batch body; it appends a `[SKIP]` line to
+that workflow's log and returns exit code `75`. The lock prevents concurrent
+execution, but intentionally does not block a later explicit retry after the
+first process has finished.
+
+Before starting a workflow, the same runner rotates its operation log when it
+is at least 10 MiB. Rotated logs use timestamped `*.log` names and the newest
+five archives are retained. Logs remain ignored by Git.
+
 Before changing a definition, the script exports the affected tasks beneath
 the current user's `Documents\Codex Backups\jquants-stock-collector`
 directory. It also preserves the daily task's principal, power policy, and

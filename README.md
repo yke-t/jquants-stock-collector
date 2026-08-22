@@ -41,6 +41,11 @@ python src/dividend_backtest.py --start 2025-01-01 --top-n 20
 
 Google Sheets／Driveへの出力を含む入口は`run_dividend_daily.bat`です。
 
+`run_daily.bat`、`run_dividend_daily.bat`、`run_monthly_eval.bat`は、共通の
+Windows名前付きロックを取得してから処理を開始します。別のフローが実行中なら
+後続処理を開始せず、終了コード`75`と`[SKIP]`ログを残します。各運用ログは
+10MiB以上になると実行前に日付付きファイルへ移動し、直近5世代を保持します。
+
 ### 評価
 
 ```powershell
@@ -60,6 +65,7 @@ src/split_factor_backfill.py 株式分割時の限定価格修復・係数補完
 src/notifier.py             Google Sheets出力
 src/sync_bigquery.py        BigQuery差分同期
 scripts/verify_project.py   Codex向けオフライン検証
+scripts/run_with_lock.ps1   BAT共通の排他実行・ログ世代管理
 tests/                      ユニットテスト
 tests/integration/          明示実行する外部APIテスト
 ```

@@ -24,6 +24,7 @@ UNIT_TEST_MODULES = [
     "tests.test_update_yfinance",
     "tests.test_split_factor_backfill",
     "tests.test_sync_bigquery",
+    "tests.test_run_with_lock",
 ]
 REQUIRED_TABLES = {
     "prices",
