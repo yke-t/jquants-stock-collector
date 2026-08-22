@@ -2,6 +2,7 @@
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -38,6 +39,50 @@ class NewsAnalyzerMaskTest(unittest.TestCase):
         message = "timeout while searching Toyota"
 
         self.assertEqual(mask_api_keys(message), message)
+
+
+class StandardNewsSearchRelevanceTest(unittest.TestCase):
+    def search_with_items(self, company_name, items):
+        import src.news_analyzer as news_analyzer
+
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {"items": items}
+
+        with (
+            patch.object(news_analyzer, "GOOGLE_CSE_API_KEY", "test-key"),
+            patch.object(news_analyzer, "GOOGLE_CSE_ID", "test-cx"),
+            patch.object(news_analyzer.requests, "get", return_value=response),
+        ):
+            return news_analyzer.search_news_google(company_name)
+
+    def test_rejects_unrelated_company_with_killer_keyword(self):
+        hits = self.search_with_items("ツガミ", [{
+            "title": "東洋ゴム、通期見通し下方修正 営業利益20億円減",
+            "snippet": "自動車部品メーカーの業績ニュース",
+            "link": "https://example.test/unrelated",
+        }])
+
+        self.assertEqual(hits, [])
+
+    def test_accepts_target_company_in_title(self):
+        hits = self.search_with_items("ツガミ", [{
+            "title": "ツガミ、通期見通しを下方修正",
+            "snippet": "工作機械需要の減速を受けたもの",
+            "link": "https://example.test/relevant-title",
+        }])
+
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["keyword"], "下方修正")
+
+    def test_rejects_target_company_only_in_snippet(self):
+        hits = self.search_with_items("ツガミ", [{
+            "title": "通期見通しを下方修正",
+            "snippet": "工作機械メーカーのツガミが発表した",
+            "link": "https://example.test/relevant-snippet",
+        }])
+
+        self.assertEqual(hits, [])
 
 
 class DividendRiskAnalyzerTest(unittest.TestCase):

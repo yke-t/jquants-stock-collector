@@ -153,8 +153,9 @@ def search_news_google(company_name: str, max_results: int = 3) -> List[dict]:
         
         for item in items:
             title = item.get("title", "")
-            snippet = item.get("snippet", "")
-            text = title + " " + snippet
+            if not is_company_relevant_hit(company_name, title, ""):
+                continue
+            text = title
             
             # Killer Keywordsを検出
             for keyword in KILLER_KEYWORDS:
