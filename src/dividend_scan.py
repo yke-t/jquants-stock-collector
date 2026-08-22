@@ -34,12 +34,15 @@ MIN_AVG_VOLUME_20 = 10_000
 MAX_SHARE_PRICE = 10_000
 PRICE_TO_MA75_MAX = 1.05
 DEEP_DOWNTREND_TO_MA200 = 0.90
+SHARE_BASIS_GAP_LOW = 0.70
+SHARE_BASIS_GAP_HIGH = 1.40
 
 VERDICT_PRIORITY = {
     "BUY_ZONE": 0,
     "WATCH": 1,
     "AVOID": 2,
-    "DATA_MISSING": 3,
+    "DATA_WARNING": 3,
+    "DATA_MISSING": 4,
 }
 
 
@@ -75,6 +78,7 @@ def load_recent_prices(conn: sqlite3.Connection, lookback_days: int = 260) -> pd
         p.code,
         p.close,
         p.volume,
+        p.adjustmentfactor,
         f.coname AS name,
         f.s17nm,
         f.s33nm,
@@ -123,6 +127,98 @@ def add_price_indicators(prices: pd.DataFrame) -> pd.DataFrame:
     return prices
 
 
+def annotate_share_basis(
+    prices: pd.DataFrame,
+    candidates: pd.DataFrame,
+    asof_date: pd.Timestamp,
+) -> pd.DataFrame:
+    """Attach point-in-time per-share normalization metadata.
+
+    J-Quants adjustment factors are event factors. A financial per-share value
+    disclosed before an event is multiplied by the product of factors through
+    the valuation date. Large price discontinuities without an explicit factor
+    are never guessed over; the affected row is marked unverified instead.
+    """
+    result = candidates.copy()
+    if result.empty:
+        return result
+
+    result["share_basis_factor"] = 1.0
+    result["share_basis_status"] = "VERIFIED"
+    result["share_basis_reason"] = "no post-disclosure adjustment event"
+
+    if prices.empty or "disclosure_date" not in result.columns:
+        result["share_basis_status"] = "UNVERIFIED"
+        result["share_basis_reason"] = "share-basis history unavailable"
+        return result
+
+    priced = prices.copy()
+    priced["date"] = pd.to_datetime(priced["date"], errors="coerce")
+    priced["code"] = priced["code"].astype(str)
+    candidate_codes = set(result["code"].astype(str))
+    priced = priced[priced["code"].isin(candidate_codes)].copy()
+    priced["close"] = pd.to_numeric(priced["close"], errors="coerce")
+    if "adjustmentfactor" not in priced.columns:
+        priced["adjustmentfactor"] = pd.NA
+    priced["adjustmentfactor"] = pd.to_numeric(
+        priced["adjustmentfactor"], errors="coerce"
+    )
+    priced = priced[priced["date"] <= pd.Timestamp(asof_date)].sort_values(
+        ["code", "date"]
+    )
+    priced["previous_close"] = priced.groupby("code")["close"].shift(1)
+    priced["close_ratio"] = priced["close"] / priced["previous_close"]
+    prices_by_code = {
+        code: group for code, group in priced.groupby("code", sort=False)
+    }
+
+    for index, candidate in result.iterrows():
+        disclosure_date = pd.to_datetime(
+            candidate.get("disclosure_date"), errors="coerce"
+        )
+        if pd.isna(disclosure_date):
+            result.at[index, "share_basis_reason"] = "no financial row to normalize"
+            continue
+
+        code_prices = prices_by_code.get(str(candidate.get("code")))
+        if code_prices is None:
+            result.at[index, "share_basis_status"] = "UNVERIFIED"
+            result.at[index, "share_basis_reason"] = "price history unavailable"
+            continue
+        window = code_prices[code_prices["date"] > disclosure_date].copy()
+        if window.empty:
+            continue
+
+        explicit_actions = window[
+            window["adjustmentfactor"].notna()
+            & (window["adjustmentfactor"] > 0)
+            & ((window["adjustmentfactor"] - 1.0).abs() > 1e-12)
+        ]
+        factor = float(explicit_actions["adjustmentfactor"].prod())
+        result.at[index, "share_basis_factor"] = factor
+
+        discontinuities = window[
+            (window["close_ratio"] <= SHARE_BASIS_GAP_LOW)
+            | (window["close_ratio"] >= SHARE_BASIS_GAP_HIGH)
+        ]
+        unverified = discontinuities[
+            discontinuities["adjustmentfactor"].isna()
+            | ((discontinuities["adjustmentfactor"] - 1.0).abs() <= 1e-12)
+        ]
+        if not unverified.empty:
+            dates = ",".join(unverified["date"].dt.strftime("%Y-%m-%d").tolist())
+            result.at[index, "share_basis_status"] = "UNVERIFIED"
+            result.at[index, "share_basis_reason"] = (
+                f"price discontinuity without adjustment factor: {dates}"
+            )
+        elif not explicit_actions.empty:
+            result.at[index, "share_basis_reason"] = (
+                f"normalized with {len(explicit_actions)} explicit adjustment factor(s)"
+            )
+
+    return result
+
+
 def coalesce_numeric(row: pd.Series, columns: List[str]) -> Optional[float]:
     for column in columns:
         value = row.get(column)
@@ -147,19 +243,36 @@ def build_candidate_frame(prices: pd.DataFrame, financials: pd.DataFrame) -> pd.
         return latest_prices
 
     merged = latest_prices.merge(financials, on="code", how="left", suffixes=("", "_fin"))
-    return merged
+    return annotate_share_basis(priced, merged, latest_date)
 
 
 def classify_candidate(row: pd.Series, thresholds: DividendThresholds = DividendThresholds()) -> Dict[str, object]:
     close = row.get("close")
     dividend = coalesce_numeric(row, ["forecast_dividend_per_share", "dividend_per_share"])
     eps = coalesce_numeric(row, ["forecast_eps", "eps"])
+    share_basis_status = row.get("share_basis_status", "VERIFIED")
+    share_basis_factor = row.get("share_basis_factor", 1.0)
     profit = row.get("profit")
     equity = row.get("equity")
     total_assets = row.get("total_assets")
     avg_volume_20 = row.get("avg_volume_20")
     ma75 = row.get("ma75")
     ma200 = row.get("ma200")
+
+    if share_basis_status != "VERIFIED" or pd.isna(share_basis_factor) or float(share_basis_factor) <= 0:
+        return {
+            "verdict": "DATA_WARNING",
+            "reason": str(row.get("share_basis_reason", "share basis unverified")),
+            "score": 0.0,
+            "dividend_yield": None,
+            "payout_ratio": None,
+            "equity_ratio": None,
+        }
+
+    if dividend is not None:
+        dividend *= float(share_basis_factor)
+    if eps is not None:
+        eps *= float(share_basis_factor)
 
     missing = []
     for name, value in [
@@ -300,6 +413,9 @@ def scan_dividend_candidates(db_path: Path = DB_PATH, limit: int = 50) -> pd.Dat
         "verdict",
         "score",
         "reason",
+        "share_basis_status",
+        "share_basis_factor",
+        "share_basis_reason",
         "disclosure_date",
         "period",
         "s17nm",

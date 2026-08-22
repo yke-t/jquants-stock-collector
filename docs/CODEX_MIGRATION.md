@@ -44,14 +44,17 @@ before adopting worktree-based scheduled execution.
 
 ## Operational blockers
 
-- Corporate-action/share-basis normalization is unresolved for dividend yield,
-  payout ratio, and dividend backtests.
+- Dividend scans and backtests now multiply per-share financial values by
+  explicit point-in-time adjustment factors. Large price discontinuities with
+  no factor are blocked as `DATA_WARNING` instead of being normalized by
+  inference. The local DB still needs an explicit factor backfill for known
+  cases such as `20030` and `19610`.
 - The recurring dividend sync uses `--missing-only`, so already-covered stocks
   are not refreshed.
 - Several external-operation failures are logged without a non-zero process
   exit code.
 - Live integration tests are not part of the offline unit suite.
 
-Until these are fixed and validated with real outputs, report the pipeline as
-locally executable but not operationally trustworthy for split-sensitive
-dividend names.
+Until the factor backfill and remaining items are validated with real outputs,
+report the pipeline as locally executable with split-sensitive names safely
+blocked, but not yet fully operational.

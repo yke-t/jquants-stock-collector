@@ -7,7 +7,12 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.dividend_scan import apply_dividend_news_risk, build_candidate_frame, classify_candidate
+from src.dividend_scan import (
+    annotate_share_basis,
+    apply_dividend_news_risk,
+    build_candidate_frame,
+    classify_candidate,
+)
 
 
 def row(**overrides):
@@ -66,6 +71,88 @@ class DividendScanClassificationTest(unittest.TestCase):
 
         self.assertEqual(result["verdict"], "DATA_MISSING")
         self.assertIn("missing dividend", result["reason"])
+
+    def test_unverified_share_basis_is_data_warning(self):
+        result = classify_candidate(row(
+            share_basis_status="UNVERIFIED",
+            share_basis_reason="price discontinuity without adjustment factor: 2026-03-23",
+        ))
+
+        self.assertEqual(result["verdict"], "DATA_WARNING")
+        self.assertIsNone(result["dividend_yield"])
+        self.assertIn("2026-03-23", result["reason"])
+
+    def test_explicit_split_factor_normalizes_per_share_values(self):
+        result = classify_candidate(row(
+            close=1821.0,
+            forecast_dividend_per_share=280.0,
+            forecast_eps=340.47,
+            share_basis_status="VERIFIED",
+            share_basis_factor=0.25,
+        ))
+
+        self.assertAlmostEqual(result["dividend_yield"], 3.84, places=2)
+        self.assertAlmostEqual(result["payout_ratio"], 82.2, places=1)
+
+    def test_known_20030_gap_without_factor_is_not_guessed_over(self):
+        prices = pd.DataFrame([
+            {"date": "2026-03-19", "code": "20030", "close": 7160.0, "adjustmentfactor": None},
+            {"date": "2026-03-23", "code": "20030", "close": 1633.39, "adjustmentfactor": None},
+            {"date": "2026-08-21", "code": "20030", "close": 1821.0, "adjustmentfactor": None},
+        ])
+        candidates = pd.DataFrame([{
+            "code": "20030",
+            "disclosure_date": "2026-02-02",
+        }])
+
+        annotated = annotate_share_basis(
+            prices,
+            candidates,
+            pd.Timestamp("2026-08-21"),
+        )
+
+        self.assertEqual(annotated.iloc[0]["share_basis_status"], "UNVERIFIED")
+        self.assertEqual(annotated.iloc[0]["share_basis_factor"], 1.0)
+        self.assertIn("2026-03-23", annotated.iloc[0]["share_basis_reason"])
+
+    def test_known_20030_gap_with_explicit_factor_is_normalized(self):
+        prices = pd.DataFrame([
+            {"date": "2026-03-19", "code": "20030", "close": 7160.0, "adjustmentfactor": None},
+            {"date": "2026-03-23", "code": "20030", "close": 1633.39, "adjustmentfactor": 0.25},
+            {"date": "2026-08-21", "code": "20030", "close": 1821.0, "adjustmentfactor": None},
+        ])
+        candidates = pd.DataFrame([{
+            "code": "20030",
+            "disclosure_date": "2026-02-02",
+        }])
+
+        annotated = annotate_share_basis(
+            prices,
+            candidates,
+            pd.Timestamp("2026-08-21"),
+        )
+
+        self.assertEqual(annotated.iloc[0]["share_basis_status"], "VERIFIED")
+        self.assertEqual(annotated.iloc[0]["share_basis_factor"], 0.25)
+
+    def test_known_19610_gap_without_factor_is_not_guessed_over(self):
+        prices = pd.DataFrame([
+            {"date": "2026-04-20", "code": "19610", "close": 7060.0, "adjustmentfactor": None},
+            {"date": "2026-04-21", "code": "19610", "close": 2380.0, "adjustmentfactor": None},
+        ])
+        candidates = pd.DataFrame([{
+            "code": "19610",
+            "disclosure_date": "2026-02-13",
+        }])
+
+        annotated = annotate_share_basis(
+            prices,
+            candidates,
+            pd.Timestamp("2026-08-21"),
+        )
+
+        self.assertEqual(annotated.iloc[0]["share_basis_status"], "UNVERIFIED")
+        self.assertIn("2026-04-21", annotated.iloc[0]["share_basis_reason"])
 
     def test_price_above_ma75_is_watch(self):
         result = classify_candidate(row(close=1100.0, ma75=1000.0))

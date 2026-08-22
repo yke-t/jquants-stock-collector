@@ -48,7 +48,6 @@ FIELD_ALIASES = {
         "period",
     ],
     "dividend_per_share": [
-        "DivTotalAnn",
         "DivAnn",
         "DivFY",
         "ResultDividendPerShareAnnual",
@@ -56,7 +55,6 @@ FIELD_ALIASES = {
         "dividend_per_share",
     ],
     "forecast_dividend_per_share": [
-        "FDivTotalAnn",
         "FDivAnn",
         "FDivFY",
         "NxFDivAnn",

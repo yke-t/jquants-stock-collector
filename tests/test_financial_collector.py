@@ -37,6 +37,17 @@ class FinancialCollectorNormalizeTest(unittest.TestCase):
         self.assertIsNone(normalize_financial_row({"Code": "72030"}))
         self.assertIsNone(normalize_financial_row({"DiscDate": "2026-02-06"}))
 
+    def test_does_not_treat_total_annual_amount_as_per_share(self):
+        row = normalize_financial_row({
+            "Code": "20030",
+            "DiscDate": "2025-05-07",
+            "DivTotalAnn": "2554000000",
+            "FDivTotalAnn": "2800000000",
+        })
+
+        self.assertIsNone(row["dividend_per_share"])
+        self.assertIsNone(row["forecast_dividend_per_share"])
+
 
 if __name__ == "__main__":
     unittest.main()

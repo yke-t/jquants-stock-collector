@@ -49,13 +49,20 @@ def fetch_single_stock(ticker: str, code: str, start_date: str, end_date: str) -
     """単一銘柄のデータを取得"""
     try:
         stock = yf.Ticker(ticker)
-        hist = stock.history(start=start_date, end=end_date)
+        hist = stock.history(
+            start=start_date,
+            end=end_date,
+            auto_adjust=False,
+            actions=True,
+        )
         
         if hist.empty:
             return []
         
         results = []
         for date_idx, row in hist.iterrows():
+            split_ratio = float(row.get('Stock Splits', 0) or 0)
+            adjustment_factor = (1.0 / split_ratio) if split_ratio > 0 else None
             results.append({
                 'date': date_idx.strftime('%Y-%m-%d'),
                 'code': code,
@@ -64,6 +71,7 @@ def fetch_single_stock(ticker: str, code: str, start_date: str, end_date: str) -
                 'low': float(row.get('Low', 0)),
                 'close': float(row.get('Close', 0)),
                 'volume': int(row.get('Volume', 0)),
+                'adjustmentfactor': adjustment_factor,
             })
         return results
     except Exception:
@@ -118,8 +126,19 @@ def update_database(df: pd.DataFrame, db_path: Path) -> int:
     for _, row in df.iterrows():
         try:
             cursor.execute("""
-                INSERT OR REPLACE INTO prices (date, code, open, high, low, close, volume)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO prices
+                    (date, code, open, high, low, close, volume, adjustmentfactor)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(date, code) DO UPDATE SET
+                    open = excluded.open,
+                    high = excluded.high,
+                    low = excluded.low,
+                    close = excluded.close,
+                    volume = excluded.volume,
+                    adjustmentfactor = COALESCE(
+                        excluded.adjustmentfactor,
+                        prices.adjustmentfactor
+                    )
             """, (
                 row['date'],
                 row['code'],
@@ -127,13 +146,15 @@ def update_database(df: pd.DataFrame, db_path: Path) -> int:
                 row['high'],
                 row['low'],
                 row['close'],
-                row['volume']
+                row['volume'],
+                row.get('adjustmentfactor'),
             ))
             count += 1
         except Exception:
             continue
     
     conn.commit()
+    cursor.close()
     conn.close()
     return count
 

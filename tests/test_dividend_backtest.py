@@ -37,7 +37,8 @@ class DividendBacktestTest(unittest.TestCase):
                     date TEXT,
                     code TEXT,
                     close REAL,
-                    volume REAL
+                    volume REAL,
+                    adjustmentfactor REAL
                 );
                 CREATE TABLE fundamentals (
                     code TEXT,

@@ -20,6 +20,7 @@ UNIT_TEST_MODULES = [
     "tests.test_scan",
     "tests.test_evaluate",
     "tests.test_settings",
+    "tests.test_update_yfinance",
 ]
 REQUIRED_TABLES = {
     "prices",
@@ -80,6 +81,9 @@ def check_local_files() -> bool:
 
 def check_database() -> bool:
     sys.path.insert(0, str(PROJECT_ROOT))
+    import pandas as pd
+
+    from src.dividend_scan import annotate_share_basis, classify_candidate
     from src.settings import DATABASE_PATH
 
     if not DATABASE_PATH.exists():
@@ -105,6 +109,33 @@ def check_database() -> bool:
             "FROM dividend_financials"
         ).fetchone()
 
+        regression_codes = ("20030", "19610")
+        prices = pd.read_sql(
+            """SELECT date, code, close, adjustmentfactor
+               FROM prices
+               WHERE code IN (?, ?)
+               ORDER BY code, date""",
+            connection,
+            params=regression_codes,
+            parse_dates=["date"],
+        )
+        financials = pd.read_sql(
+            """SELECT df.*
+               FROM dividend_financials df
+               JOIN (
+                   SELECT code, MAX(disclosure_date) AS disclosure_date
+                   FROM dividend_financials
+                   WHERE code IN (?, ?)
+                   GROUP BY code
+               ) latest
+                 ON df.code = latest.code
+                AND df.disclosure_date = latest.disclosure_date
+               ORDER BY df.code, df.period""",
+            connection,
+            params=regression_codes,
+            parse_dates=["disclosure_date"],
+        )
+
     size_gib = DATABASE_PATH.stat().st_size / (1024**3)
     print(f"[OK] DB path={DATABASE_PATH} size={size_gib:.2f} GiB price_max={price_max}")
     print(
@@ -112,7 +143,40 @@ def check_database() -> bool:
         f"rows={dividend_summary[0]} codes={dividend_summary[1]} "
         f"latest_disclosure={dividend_summary[2]}"
     )
-    print("[WARN] Operational readiness still requires split/share-basis regression checks")
+    latest_prices = (
+        prices.sort_values(["code", "date"])
+        .drop_duplicates("code", keep="last")[["date", "code", "close"]]
+    )
+    latest_financials = (
+        financials.sort_values(["code", "disclosure_date", "period"])
+        .drop_duplicates("code", keep="last")
+    )
+    candidates = latest_prices.merge(latest_financials, on="code", how="inner")
+    if set(candidates["code"]) != set(regression_codes):
+        print("[FAIL] Missing split regression data for 20030 or 19610")
+        return False
+
+    candidates = annotate_share_basis(prices, candidates, prices["date"].max())
+    for _, candidate in candidates.iterrows():
+        result = classify_candidate(candidate)
+        code = candidate["code"]
+        status = candidate["share_basis_status"]
+        factor = candidate["share_basis_factor"]
+        if status == "UNVERIFIED":
+            if result["verdict"] != "DATA_WARNING" or result["dividend_yield"] is not None:
+                print(f"[FAIL] {code} unverified share basis was not blocked")
+                return False
+        elif factor == 1.0 or result["dividend_yield"] is None:
+            print(f"[FAIL] {code} verified split was not normalized")
+            return False
+        print(
+            f"[OK] split regression code={code} status={status} "
+            f"factor={factor:g} verdict={result['verdict']} "
+            f"yield={result['dividend_yield']} reason={candidate['share_basis_reason']}"
+        )
+
+    if any(candidates["share_basis_status"] == "UNVERIFIED"):
+        print("[WARN] Explicit adjustment-factor backfill is still required")
     return True
 
 

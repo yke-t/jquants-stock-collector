@@ -24,6 +24,7 @@ from src.dividend_scan import (
     MAX_SHARE_PRICE,
     VERDICT_PRIORITY,
     add_price_indicators,
+    annotate_share_basis,
     classify_candidate,
 )
 from src.settings import DATABASE_PATH, REPORTS_DIR as PROJECT_REPORTS_DIR
@@ -45,7 +46,8 @@ def load_backtest_data(
     ).strftime("%Y-%m-%d")
     with closing(sqlite3.connect(db_path)) as conn:
         price_query = """
-        SELECT p.date, p.code, p.close, p.volume, f.coname AS name, f.s33nm, f.mktnm
+        SELECT p.date, p.code, p.close, p.volume, p.adjustmentfactor,
+               f.coname AS name, f.s33nm, f.mktnm
         FROM prices p
         LEFT JOIN fundamentals f ON p.code = f.code
         WHERE p.date >= ?
@@ -119,6 +121,7 @@ def candidates_asof(prices: pd.DataFrame, financials: pd.DataFrame, asof_date: p
     if merged.empty:
         return merged
 
+    merged = annotate_share_basis(priced, merged, asof_date)
     classified = merged.apply(lambda row: classify_candidate(row), axis=1, result_type="expand")
     result = pd.concat([merged.reset_index(drop=True), classified.reset_index(drop=True)], axis=1)
     result["verdict_priority"] = result["verdict"].map(VERDICT_PRIORITY).fillna(9)

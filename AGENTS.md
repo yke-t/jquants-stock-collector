@@ -26,7 +26,7 @@ than ordinary source edits.
 - Run the DB-aware read-only verification with
   `python scripts/verify_project.py --with-db`.
 - The focused unit suite is:
-  `python -m unittest tests.test_export_drive_spreadsheet tests.test_dividend_scan tests.test_dividend_backtest tests.test_financial_collector tests.test_news_analyzer tests.test_scan tests.test_evaluate tests.test_settings`.
+  `python -m unittest tests.test_export_drive_spreadsheet tests.test_dividend_scan tests.test_dividend_backtest tests.test_financial_collector tests.test_news_analyzer tests.test_scan tests.test_evaluate tests.test_settings tests.test_update_yfinance`.
 - Integration tests under `tests/integration/` call external services. Run them
   only when the task explicitly requires live validation.
 
