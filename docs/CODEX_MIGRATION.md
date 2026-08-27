@@ -52,6 +52,17 @@ would retain the superseded credential. Issuance/revocation is controlled by
 the J-Quants dashboard; the script only validates and installs the newly issued
 key locally.
 
+The exposed historical key was regenerated on 2026-08-28. The dashboard
+confirmed that regeneration makes the prior key unavailable, and the new
+43-character key was installed as the single `JQUANTS_API_KEY` definition in
+the ignored repository `.env` without a plaintext backup. Read-only live
+checks returned HTTP 200 from both `/v2/equities/master?code=86970` and the
+production client's `/v2/fins/summary?code=86970` path; the latter returned 12
+financial-summary rows. This proves the rotated credential and the dividend
+client authentication path, but the next complete 18:00 scheduled workflow
+must still be checked separately before making a fresh end-to-end operational
+claim.
+
 ## What belongs where
 
 - Durable repository behavior and verification rules: `AGENTS.md`.
