@@ -7,7 +7,7 @@ J-Quants API (Premium Plan) を使用して、過去10年分（2014年〜現在�
 
 | 選択 | 理由 |
 |------|------|
-| **jquants-api-client** | 公式ライブラリ。認証・ページネーション・レートリミットを内部で処理。自前でrequests直書きは車輪の再発明（＝Toil）。 |
+| **requests + J-Quants V2** | V2 APIキーを`x-api-key`で送り、利用エンドポイントと保存フィールドを明示的に管理。 |
 | **SQLite** | ローカル環境で動作、セットアップ不要。バックテスト用途に最適。 |
 | **tqdm** | 進捗表示。中断時の再開位置特定に有用。 |
 
@@ -37,7 +37,7 @@ C:\Users\yke\Projects\jquants-stock-collector\
 必要なPythonパッケージを定義。
 
 ```text
-jquants-api-client>=2.0.0
+requests>=2.31.0
 pandas>=2.0.0
 python-dotenv>=1.0.0
 tqdm>=4.65.0
@@ -47,40 +47,34 @@ tqdm>=4.65.0
 
 ### [NEW] [client.py](file:///C:/Users/yke/Projects/jquants-stock-collector/src/client.py)
 
-`jquants-api-client` ライブラリをラップし、認証と銘柄一覧取得を提供するクラス。
+J-Quants V2 APIをラップし、APIキー認証と銘柄一覧取得を提供するクラス。
 
 **主要メソッド:**
-- `__init__(mail_address, password)` - 認証情報でクライアントを初期化
-- `get_listed_stocks()` → `pd.DataFrame` - 全上場銘柄コード一覧を取得
-- `get_price_range(start_dt, end_dt)` → `pd.DataFrame` - 期間指定で株価取得
-- `get_statements_range(start_dt, end_dt)` → `pd.DataFrame` - 期間指定で財務情報取得
+- `__init__()` - `.env`の`JQUANTS_API_KEY`でクライアントを初期化
+- `get_listed_info()` - 上場銘柄情報を取得
+- `get_daily_quotes()` - 日足株価を取得
+- `get_financial_summary()` - 財務サマリーを取得
 
 ```python
-import jquantsapi
-from datetime import datetime
-from dateutil import tz
-import pandas as pd
+import requests
+
+from src.settings import JQUANTS_API_KEY
 
 class JQuantsClient:
-    """J-Quants APIクライアントラッパー"""
-    
-    def __init__(self, mail_address: str, password: str):
-        self.client = jquantsapi.Client(
-            mail_address=mail_address,
-            password=password
+    BASE_URL = "https://api.jquants.com/v2"
+
+    def __init__(self):
+        if not JQUANTS_API_KEY:
+            raise ValueError("JQUANTS_API_KEY environment variable is required.")
+        self.headers = {"x-api-key": JQUANTS_API_KEY}
+
+    def get_listed_info(self):
+        response = requests.get(
+            f"{self.BASE_URL}/equities/master",
+            headers=self.headers,
         )
-        self.tz = tz.gettz("Asia/Tokyo")
-    
-    def get_listed_stocks(self) -> pd.DataFrame:
-        """全上場銘柄一覧を取得"""
-        return self.client.get_list()
-    
-    def get_price_range(self, start_dt: datetime, end_dt: datetime) -> pd.DataFrame:
-        """期間指定で株価データを取得"""
-        return self.client.get_price_range(
-            start_dt=start_dt.replace(tzinfo=self.tz),
-            end_dt=end_dt.replace(tzinfo=self.tz)
-        )
+        response.raise_for_status()
+        return response.json()
 ```
 
 ---
@@ -129,7 +123,7 @@ CREATE TABLE IF NOT EXISTS sync_progress (
 **処理フロー:**
 1. `sync_progress`テーブルから最終同期日を取得
 2. 最終同期日〜現在までをチャンク分割（月ごと）
-3. 各チャンクを`jquants-api-client`で取得
+3. 各チャンクをJ-Quants V2 APIで取得
 4. SQLiteにUPSERT
 5. 進捗を更新
 
@@ -173,8 +167,8 @@ python main.py --start 2014-01-01 --end 2024-12-23
 
 2. **認証テスト**
    ```bash
-   # .envにJQUANTS_MAIL_ADDRESS, JQUANTS_PASSWORD設定後
-   python -c "from src.client import JQuantsClient; import os; from dotenv import load_dotenv; load_dotenv(); c = JQuantsClient(os.getenv('JQUANTS_MAIL_ADDRESS'), os.getenv('JQUANTS_PASSWORD')); print(c.get_listed_stocks().head())"
+   # .envにJQUANTS_API_KEY設定後（外部APIへの読み取りリクエスト）
+   python -c "from src.client import JQuantsClient; print(JQuantsClient().get_listed_info().keys())"
    ```
 
 ### 手動検証

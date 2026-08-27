@@ -24,12 +24,12 @@ class JQuantsClient:
 
     def __init__(self):
         """環境変数からAPIキーを取得してクライアントを初期化"""
-        # V2ではAPIキーを使用（環境変数名は互換性のため両方サポート）
+        # V2ではAPIキーを使用する。V1のrefresh tokenは互換値ではない。
         self.api_key = JQUANTS_API_KEY
         
         if not self.api_key:
             raise ValueError(
-                "JQUANTS_API_KEY (or JQUANTS_REFRESH_TOKEN) environment variable is required."
+                "JQUANTS_API_KEY environment variable is required."
             )
         
         # V2ではx-api-keyヘッダーを使用

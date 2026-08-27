@@ -14,7 +14,7 @@ J-Quants API (Premium Plan) を使用して日本株データを収集し、SQLi
 
 ## 機能一覧
 
-- ✅ **認証処理**: `jquants-api-client`ライブラリによる自動トークン管理
+- ✅ **認証処理**: J-Quants API V2の`x-api-key`ヘッダー
 - ✅ **株価データ取得**: 期間指定で全銘柄の日足データを取得
 - ✅ **財務情報取得**: 期間指定で財務データを取得
 - ✅ **進捗管理**: `sync_progress`テーブルで中断再開可能
@@ -38,7 +38,7 @@ python -c "from src.database import StockDatabase; db = StockDatabase('test.db')
 # 1. 環境設定
 cd C:\Users\yke\Projects\jquants-stock-collector
 cp .env.example .env
-# .envを編集してJQUANTS_MAIL_ADDRESS, JQUANTS_PASSWORDを設定
+# .envを編集してJQUANTS_API_KEYを設定
 
 # 2. 実行
 python main.py --start 2014-01-01 --end 2024-12-23
@@ -49,7 +49,7 @@ python main.py --start 2014-01-01 --end 2024-12-23
 > [!IMPORTANT]
 > **時価総額データの取得方法**は、実際にAPIを叩いて確認が必要です。
 > 
-> `.env`に認証情報を設定後、以下のコマンドで確認してください：
+> `.env`にAPIキーを設定後、以下のコマンドで確認してください：
 > ```bash
-> python -c "from src.client import JQuantsClient; import os; from dotenv import load_dotenv; load_dotenv(); c = JQuantsClient(os.getenv('JQUANTS_MAIL_ADDRESS'), os.getenv('JQUANTS_PASSWORD')); print(c.get_listed_stocks().columns.tolist())"
+> python -c "from src.client import JQuantsClient; print(JQuantsClient().get_listed_info().keys())"
 > ```

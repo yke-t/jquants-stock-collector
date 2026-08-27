@@ -21,6 +21,37 @@ Keep command networking disabled by default. Enable live network access only
 for a task that explicitly needs J-Quants, yfinance, Google CSE, Sheets, Drive,
 or BigQuery.
 
+## J-Quants credential rotation
+
+J-Quants V2 uses one `JQUANTS_API_KEY` value from the ignored repository
+`.env`. V1 mail/password and refresh-token credentials are not accepted as
+fallbacks. The 17:00 daily price task currently uses yfinance; the key is used
+by J-Quants collection paths including the 18:00 dividend-financial sync.
+
+Rotate a key outside the scheduled workflow windows:
+
+1. Sign in to the official J-Quants dashboard and issue or regenerate the V2
+   API key. Do not paste the key into Codex chat, a command-line argument, or a
+   tracked file.
+2. From the repository root in an interactive PowerShell, run:
+
+   ```powershell
+   python scripts\rotate_jquants_api_key.py
+   ```
+
+3. Paste the new key at the hidden prompt. The script makes one read-only
+   request to `https://api.jquants.com/v2/equities/master`, refuses an invalid
+   key, acquires the scheduled workflows' shared mutex, and atomically replaces
+   only `JQUANTS_API_KEY` in `.env`.
+4. Confirm the next `NISA-JQuant Dividend Daily` task result, the
+   `dividend_operation.log` terminal marker, `sync_progress`, and the produced
+   CSV before calling the rotated workflow operational.
+
+The rotation script does not create a plaintext `.env` backup because doing so
+would retain the superseded credential. Issuance/revocation is controlled by
+the J-Quants dashboard; the script only validates and installs the newly issued
+key locally.
+
 ## What belongs where
 
 - Durable repository behavior and verification rules: `AGENTS.md`.
