@@ -8,10 +8,12 @@ Google Sheets Notifier Module
 """
 import gspread
 import os
+import time
+import requests
 from google.oauth2.service_account import Credentials
 from pathlib import Path
 from datetime import datetime
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Callable, TypeVar
 import logging
 from dotenv import load_dotenv
 
@@ -45,6 +47,67 @@ SCOPES = [
 # Logging
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
+
+TRANSIENT_GOOGLE_STATUS_CODES = {429, 500, 502, 503, 504}
+GOOGLE_API_MAX_ATTEMPTS = 5
+GOOGLE_API_INITIAL_DELAY_SECONDS = 2.0
+T = TypeVar("T")
+
+
+def google_api_status_code(error: Exception) -> Optional[int]:
+    """Extract an HTTP status code from gspread/requests style errors."""
+    response = getattr(error, "response", None)
+    value = getattr(response, "status_code", None)
+    if value is None:
+        value = getattr(error, "status_code", None)
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def is_transient_google_error(error: Exception) -> bool:
+    status_code = google_api_status_code(error)
+    if status_code in TRANSIENT_GOOGLE_STATUS_CODES:
+        return True
+    return isinstance(
+        error,
+        (requests.exceptions.ConnectionError, requests.exceptions.Timeout),
+    )
+
+
+def call_google_api_with_retry(
+    operation: Callable[[], T],
+    operation_name: str,
+    *,
+    max_attempts: int = GOOGLE_API_MAX_ATTEMPTS,
+    initial_delay_seconds: float = GOOGLE_API_INITIAL_DELAY_SECONDS,
+    sleep_fn: Callable[[float], None] = time.sleep,
+) -> T:
+    """Retry only transient Google API failures with bounded backoff."""
+    if max_attempts < 1:
+        raise ValueError("max_attempts must be at least 1")
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return operation()
+        except Exception as error:
+            if attempt >= max_attempts or not is_transient_google_error(error):
+                raise
+            delay = initial_delay_seconds * (2 ** (attempt - 1))
+            status_code = google_api_status_code(error)
+            reason = f"HTTP {status_code}" if status_code is not None else type(error).__name__
+            logger.warning(
+                "[NOTIFIER] %s failed with %s; retry %d/%d in %.1f seconds.",
+                operation_name,
+                reason,
+                attempt + 1,
+                max_attempts,
+                delay,
+            )
+            sleep_fn(delay)
+
+    raise AssertionError("unreachable")
 
 def get_sheets_client() -> Optional[gspread.Client]:
     """Google Sheets APIクライアントを認証・取得する"""
@@ -83,12 +146,18 @@ def update_signal_sheet(signal_data: List[Dict[str, Any]], spreadsheet_key: str 
 
     try:
         # スプレッドシートを開く
-        sh = client.open_by_key(spreadsheet_key)
+        sh = call_google_api_with_retry(
+            lambda: client.open_by_key(spreadsheet_key),
+            "Open signal spreadsheet",
+        )
         
         # シートの取得または作成（日付入りシート名）
         sheet_name = get_sheet_name()
         try:
-            worksheet = sh.worksheet(sheet_name)
+            worksheet = call_google_api_with_retry(
+                lambda: sh.worksheet(sheet_name),
+                "Find signal worksheet",
+            )
         except gspread.WorksheetNotFound:
             logger.info(f"[NOTIFIER] Sheet '{sheet_name}' not found. Creating new sheet...")
             worksheet = sh.add_worksheet(title=sheet_name, rows=100, cols=10)
@@ -115,15 +184,24 @@ def update_signal_sheet(signal_data: List[Dict[str, Any]], spreadsheet_key: str 
             ])
             
         # 既存データをクリアして書き込み
-        worksheet.clear()
+        call_google_api_with_retry(worksheet.clear, "Clear signal worksheet")
         
         if rows:
             # ヘッダー + データ
-            worksheet.update(range_name='A1', values=[header] + rows)
+            call_google_api_with_retry(
+                lambda: worksheet.update(range_name='A1', values=[header] + rows),
+                "Update signal worksheet",
+            )
             logger.info(f"[NOTIFIER] Successfully updated sheet with {len(rows)} signals.")
         else:
             # データが無い場合もヘッダーだけは残す
-            worksheet.update(range_name='A1', values=[header, ["(No signals today)"]])
+            call_google_api_with_retry(
+                lambda: worksheet.update(
+                    range_name='A1',
+                    values=[header, ["(No signals today)"]],
+                ),
+                "Update empty signal worksheet",
+            )
             logger.info("[NOTIFIER] No signals to report. Sheet cleared.")
 
         return True
@@ -147,10 +225,16 @@ def update_dividend_candidate_sheet(
         return False
 
     try:
-        sh = client.open_by_key(spreadsheet_key)
+        sh = call_google_api_with_retry(
+            lambda: client.open_by_key(spreadsheet_key),
+            "Open dividend spreadsheet",
+        )
         sheet_name = get_dividend_sheet_name()
         try:
-            worksheet = sh.worksheet(sheet_name)
+            worksheet = call_google_api_with_retry(
+                lambda: sh.worksheet(sheet_name),
+                "Find dividend worksheet",
+            )
         except gspread.WorksheetNotFound:
             logger.info(f"[NOTIFIER] Sheet '{sheet_name}' not found. Creating new sheet...")
             worksheet = sh.add_worksheet(title=sheet_name, rows=200, cols=20)
@@ -189,12 +273,21 @@ def update_dividend_candidate_sheet(
                 str(item.get('mktnm', '')),
             ])
 
-        worksheet.clear()
+        call_google_api_with_retry(worksheet.clear, "Clear dividend worksheet")
         if rows:
-            worksheet.update(range_name='A1', values=[header] + rows)
+            call_google_api_with_retry(
+                lambda: worksheet.update(range_name='A1', values=[header] + rows),
+                "Update dividend worksheet",
+            )
             logger.info(f"[NOTIFIER] Successfully updated dividend sheet with {len(rows)} rows.")
         else:
-            worksheet.update(range_name='A1', values=[header, ["(No dividend candidates)"]])
+            call_google_api_with_retry(
+                lambda: worksheet.update(
+                    range_name='A1',
+                    values=[header, ["(No dividend candidates)"]],
+                ),
+                "Update empty dividend worksheet",
+            )
             logger.info("[NOTIFIER] No dividend candidates to report.")
 
         return True

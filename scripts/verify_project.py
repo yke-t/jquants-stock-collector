@@ -26,6 +26,7 @@ UNIT_TEST_MODULES = [
     "tests.test_sync_bigquery",
     "tests.test_run_with_lock",
     "tests.test_rotate_jquants_api_key",
+    "tests.test_notifier",
 ]
 REQUIRED_TABLES = {
     "prices",

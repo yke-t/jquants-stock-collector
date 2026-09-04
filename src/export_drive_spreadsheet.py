@@ -7,6 +7,7 @@ Set GOOGLE_DRIVE_FOLDER_ID to create files in a specific Drive folder.
 
 import argparse
 import csv
+import gspread
 import os
 import sys
 from pathlib import Path
@@ -16,7 +17,11 @@ from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.notifier import SPREADSHEET_KEY, get_sheets_client
+from src.notifier import (
+    SPREADSHEET_KEY,
+    call_google_api_with_retry,
+    get_sheets_client,
+)
 from src.settings import (
     GOOGLE_DRIVE_EXPORT_SPREADSHEET_KEY,
     GOOGLE_DRIVE_FOLDER_ID,
@@ -51,9 +56,15 @@ def worksheet_title(csv_path: Path) -> str:
 
 
 def write_rows_to_worksheet(worksheet, rows: List[List[str]]) -> None:
-    worksheet.clear()
-    worksheet.resize(rows=len(rows), cols=max(len(row) for row in rows))
-    worksheet.update(range_name="A1", values=rows)
+    call_google_api_with_retry(worksheet.clear, "Clear export worksheet")
+    call_google_api_with_retry(
+        lambda: worksheet.resize(rows=len(rows), cols=max(len(row) for row in rows)),
+        "Resize export worksheet",
+    )
+    call_google_api_with_retry(
+        lambda: worksheet.update(range_name="A1", values=rows),
+        "Update export worksheet",
+    )
 
 
 def export_csv_to_spreadsheet(
@@ -71,7 +82,10 @@ def export_csv_to_spreadsheet(
 
     spreadsheet = client.create(title or default_title(csv_path), folder_id=folder_id)
     worksheet = spreadsheet.sheet1
-    worksheet.update_title("data")
+    call_google_api_with_retry(
+        lambda: worksheet.update_title("data"),
+        "Rename export worksheet",
+    )
     write_rows_to_worksheet(worksheet, rows)
     return spreadsheet.url
 
@@ -89,11 +103,17 @@ def export_csv_to_existing_spreadsheet(
     if not client:
         raise RuntimeError("Google Sheets client is not available")
 
-    spreadsheet = client.open_by_key(spreadsheet_key)
+    spreadsheet = call_google_api_with_retry(
+        lambda: client.open_by_key(spreadsheet_key),
+        "Open export spreadsheet",
+    )
     sheet_title = title or worksheet_title(csv_path)
     try:
-        worksheet = spreadsheet.worksheet(sheet_title)
-    except Exception:
+        worksheet = call_google_api_with_retry(
+            lambda: spreadsheet.worksheet(sheet_title),
+            "Find export worksheet",
+        )
+    except gspread.WorksheetNotFound:
         worksheet = spreadsheet.add_worksheet(title=sheet_title, rows=max(len(rows), 1), cols=max(len(row) for row in rows))
 
     write_rows_to_worksheet(worksheet, rows)

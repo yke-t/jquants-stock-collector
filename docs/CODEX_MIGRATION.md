@@ -63,6 +63,23 @@ client authentication path, but the next complete 18:00 scheduled workflow
 must still be checked separately before making a fresh end-to-end operational
 claim.
 
+Post-rotation scheduled evidence was checked on 2026-09-04. The dividend task
+completed on both 2026-08-28 and 2026-08-31 with the rotated key. Subsequent
+J-Quants collection also continued through 2026-09-03: `sync_progress` reached
+that date, 2,500 code checkpoints advanced after rotation, and
+`dividend_financials` reached 36,032 rows across 3,841 codes. This confirms that
+the rotated J-Quants credential is operational in the scheduled workflow.
+
+The 2026-09-01 through 2026-09-03 dividend failures, and the 2026-09-03 daily
+failure, occurred later at Google Sheets `open_by_key` with HTTP 503. A
+read-only retry outside the schedule succeeded and found 169 worksheets, so
+the failure is not a J-Quants regression or a permanent Sheets authorization
+failure. Google Sheets operations now retry only HTTP 429/500/502/503/504 and
+connection timeouts, up to five attempts with 2/4/8/16-second delays. Permission
+and configuration failures still fail immediately. The retry behavior is
+offline-tested; its first scheduled write remains operationally unverified
+until the next task result and log terminal marker are inspected.
+
 ## What belongs where
 
 - Durable repository behavior and verification rules: `AGENTS.md`.
