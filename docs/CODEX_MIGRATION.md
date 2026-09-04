@@ -80,6 +80,18 @@ and configuration failures still fail immediately. The retry behavior is
 offline-tested; its first scheduled write remains operationally unverified
 until the next task result and log terminal marker are inspected.
 
+Run the read-only operational audit after the 18:00 workflow has finished:
+
+```powershell
+python scripts\audit_scheduled_operations.py
+```
+
+The command combines Task Scheduler exit codes, per-workflow log terminal
+markers, read-only SQLite dates/counts, and the newest generated reports. It
+returns exit code `0` for `pass`, `1` for `fail`, `2` while the target day's
+runs are still `pending`, and `3` if the inspection itself cannot complete. It
+never starts a task or writes to the database or external services.
+
 ## What belongs where
 
 - Durable repository behavior and verification rules: `AGENTS.md`.
