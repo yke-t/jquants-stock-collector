@@ -28,6 +28,8 @@ UNIT_TEST_MODULES = [
     "tests.test_rotate_jquants_api_key",
     "tests.test_notifier",
     "tests.test_audit_scheduled_operations",
+    "tests.test_analyze_signal_performance",
+    "tests.test_build_signal_analysis_report",
 ]
 REQUIRED_TABLES = {
     "prices",

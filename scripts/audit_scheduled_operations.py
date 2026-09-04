@@ -273,24 +273,33 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def format_json_for_stdout(payload: Any, encoding: str | None = None) -> str:
+    """Return readable JSON, escaping non-ASCII only when stdout requires it."""
+    rendered = json.dumps(payload, ensure_ascii=False, indent=2)
+    target_encoding = encoding or getattr(sys.stdout, "encoding", None) or "utf-8"
+    try:
+        rendered.encode(target_encoding)
+    except (LookupError, UnicodeEncodeError):
+        return json.dumps(payload, ensure_ascii=True, indent=2)
+    return rendered
+
+
 def main() -> int:
     args = parse_args()
     try:
         audit = build_audit(args.repository_root.resolve(), args.date)
     except Exception as error:
         print(
-            json.dumps(
+            format_json_for_stdout(
                 {
                     "overall_status": "inspection_error",
                     "error": f"{type(error).__name__}: {error}",
-                },
-                ensure_ascii=False,
-                indent=2,
+                }
             )
         )
         return 3
 
-    print(json.dumps(audit, ensure_ascii=False, indent=2))
+    print(format_json_for_stdout(audit))
     return {"pass": 0, "fail": 1, "pending": 2}[audit["overall_status"]]
 
 

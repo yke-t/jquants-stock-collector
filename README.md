@@ -18,6 +18,7 @@ python scripts/verify_project.py --with-db
 - 実値は`.env`と`secret_key.json`へ置き、Gitへ追加しません。
 - Codexのプロジェクト設定は`.codex/config.toml`にあります。
 - 既定の検証はオフラインです。外部APIやGoogleサービスを使う検証は明示的に実行します。
+- GitHub ActionsもPython 3.11／Windows上で`python scripts/verify_project.py`だけを実行し、秘密情報や本番DBを渡しません。
 
 ## 現在の主要フロー
 
@@ -52,6 +53,20 @@ Windows名前付きロックを取得してから処理を開始します。別�
 python -m src.evaluate --prev-month --charts --report
 ```
 
+### 保存シグナルの読み取り専用分析
+
+```powershell
+python scripts/analyze_signal_performance.py --output-dir reports/signal_analysis
+python scripts/build_signal_analysis_report.py `
+  --summary reports/signal_analysis/analysis_summary.json `
+  --output-dir reports/signal_analysis
+```
+
+この分析はSQLiteを読み取り専用で開き、株式単位を明示的な調整係数で確認できる
+価格窓だけを使います。APIやGoogleサービスには接続せず、DBも更新しません。
+既存のポートフォリオ・バックテストは、約定時点、株式分割、資金制約、損益集計の
+方法論を再設計するまで意思決定用の根拠に含めません。
+
 ## ディレクトリ
 
 ```text
@@ -65,6 +80,9 @@ src/split_factor_backfill.py 株式分割時の限定価格修復・係数補完
 src/notifier.py             Google Sheets出力
 src/sync_bigquery.py        BigQuery差分同期
 scripts/verify_project.py   Codex向けオフライン検証
+scripts/audit_scheduled_operations.py 定期処理の読み取り専用監査
+scripts/analyze_signal_performance.py 保存シグナルの株式単位検証・成績分析
+scripts/build_signal_analysis_report.py 分析JSONから検証用レポート定義を構築
 scripts/run_with_lock.ps1   BAT共通の排他実行・ログ世代管理
 tests/                      ユニットテスト
 tests/integration/          明示実行する外部APIテスト
@@ -74,67 +92,21 @@ tests/integration/          明示実行する外部APIテスト
 
 配当スキャナと配当バックテストは、明示的な`adjustmentfactor`がある場合だけ1株指標を同じ株数基準へ補正します。大きな価格断絶に係数がない銘柄は、推測で補正せず`DATA_WARNING`として利回り計算から除外します。`src/split_factor_backfill.py`は、J-Quants原値のドライラン照合、更新対象とバックアップの一致確認、限定価格修復・係数補完を1トランザクションで行います。各ローカルDBは個別にバックアップしたうえで適用し、`python scripts/verify_project.py --with-db`で再検証してください。
 
-配当財務の日次同期は`--stale-days 7 --limit 500`で、未取得銘柄を先に、取得済み銘柄を最終更新が古い順にローテーション更新します。正常な空応答も取得試行として`sync_progress`へ記録するため、財務データのない銘柄で処理順が停滞しません。実データ回帰確認が完了するまでは、配当結果を参考値として扱ってください。
+配当財務の日次同期は`--stale-days 7 --limit 500`で、未取得銘柄を先に、取得済み銘柄を最終更新が古い順にローテーション更新します。正常な空応答も取得試行として`sync_progress`へ記録するため、財務データのない銘柄で処理順が停滞しません。株式分割を含む実データ回帰確認は完了していますが、運用コードを変更した場合は、実行結果・DB更新・生成物を再確認してから運用可能と判断してください。
 
-## Legacy collector quickstart
+## 過去期間のJ-Quants株価収集
 
-J-Quants API (Premium Plan) を使用して、日本株の過去データを収集しSQLiteデータベースに保存するスクリプトです。
+`main.py`は、J-Quants V2を使用して指定期間の日本株データをSQLiteへ保存します。通常の17:00日次タスクは`run_daily.bat`からyfinanceを使用し、18:00配当タスクはJ-Quantsを使用します。
 
-## 機能
-
-- 📈 過去10年分の株価データ（四本値 + 出来高 + 売買代金）
-- 💰 財務情報（時価総額、セクター情報）
-- 🔄 中断再開機能（進捗をDBに保存）
-- 📊 tqdmによる進捗表示
-
-## セットアップ
-
-### 1. 依存パッケージのインストール
-
-```bash
-pip install -r requirements.txt
-```
-
-### 2. 環境変数の設定
-
-```bash
-cp .env.example .env
-# .envを編集してJ-Quants APIの認証情報を設定
-```
-
-### 3. 実行
-
-```bash
+```powershell
 # 全期間のデータを取得
 python main.py --start 2014-01-01 --end 2024-12-23
 
-# 特定期間のみ取得
-python main.py --start 2024-01-01 --end 2024-12-23
+# 例: 直近期間のみ取得
+python main.py --start 2026-01-01 --end 2026-08-31
 ```
 
-## ディレクトリ構成
-
-```
-├── main.py              # エントリーポイント
-├── src/
-│   ├── __init__.py
-│   ├── client.py        # J-Quants APIクライアント
-│   ├── database.py      # SQLiteデータベース操作
-│   └── collector.py     # データ収集ロジック
-├── docs/
-│   ├── task.md          # タスク管理
-│   └── implementation_plan.md  # 実装計画
-├── requirements.txt
-├── .env.example
-└── README.md
-```
-
-## 出力
-
-- `stock_data.db` - SQLiteデータベース
-  - `prices` テーブル: 株価データ
-  - `fundamentals` テーブル: 財務情報
-  - `sync_progress` テーブル: 同期進捗
+このコマンドはDBを更新し、J-Quantsへアクセスします。通常の検証には使用せず、実行前に対象期間とDBバックアップを確認してください。
 
 ## ライセンス
 

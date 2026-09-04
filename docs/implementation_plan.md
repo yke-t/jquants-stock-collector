@@ -1,5 +1,10 @@
 # J-Quants 日本株データ収集スクリプト 実装計画
 
+> [!NOTE]
+> これは初期実装時の設計記録です。現在のセットアップと運用手順は
+> `README.md`、`AGENTS.md`、`docs/CODEX_MIGRATION.md`を正とします。
+> 以下の構成例やコード断片は、現行実装の完全な仕様ではありません。
+
 ## 概要
 J-Quants API (Premium Plan) を使用して、過去10年分（2014年〜現在）の日本株データをSQLiteデータベースに保存するPythonスクリプトを作成します。
 
@@ -32,9 +37,11 @@ C:\Users\yke\Projects\jquants-stock-collector\
 
 ## 提案するコード構成
 
-### [NEW] [requirements.txt](file:///C:/Users/yke/Projects/jquants-stock-collector/requirements.txt)
+### [NEW] `requirements.txt` / `requirements.lock.txt`
 
-必要なPythonパッケージを定義。
+必要なPythonパッケージを`requirements.txt`で範囲指定し、検証済みの
+Python 3.11環境を`requirements.lock.txt`で固定します。通常のセットアップには
+`python -m pip install -r requirements.lock.txt`を使用します。
 
 ```text
 requests>=2.31.0
@@ -140,37 +147,29 @@ python main.py --start 2014-01-01 --end 2024-12-23
 
 ---
 
-## User Review Required
+## 時価総額フィルターの現状
 
 > [!IMPORTANT]
-> **時価総額データについて**  
-> J-Quants APIには `market_cap` という直接的なフィールドが存在しない可能性があります。
-> 
-> **選択肢:**
-> 1. `株価 × 発行済株式数` で計算（発行済株式数は `get_listed_info` から取得可能か要確認）
-> 2. `get_fins_fs_details` の財務情報から取得可能か確認
-> 
-> **確認事項:** Premium Planで利用可能なフィールドを実際にAPIを叩いて確認する必要があります。まずは認証と銘柄一覧取得から実装し、時価総額の取得方法は後続タスクで確定させる方針でよろしいでしょうか？
+> **現状:** WFAバックテストの時価総額フィルターは無効です。再導入する場合は、
+> J-Quants V2の原フィールド、発行済株式数の基準日、株式分割調整を確認し、
+> `株価 × 発行済株式数`が同一株数基準であることを回帰テストしてください。
 
 ---
 
 ## Verification Plan
 
-### 自動テスト
-このプロジェクトは新規作成のため、既存のテストはありません。以下の検証を実施予定です：
+### オフライン検証
 
-1. **ユニットテスト（手動実行）**
-   ```bash
-   cd C:\Users\yke\Projects\jquants-stock-collector
-   python -c "from src.client import JQuantsClient; print('Import OK')"
-   ```
+```powershell
+python scripts\verify_project.py
+python -m pip check
+```
 
-2. **認証テスト**
-   ```bash
-   # .envにJQUANTS_API_KEY設定後（外部APIへの読み取りリクエスト）
-   python -c "from src.client import JQuantsClient; print(JQuantsClient().get_listed_info().keys())"
-   ```
+### DBを読む検証
 
-### 手動検証
-1. スクリプト実行後、SQLiteデータベースファイルが生成されていることを確認
-2. `sqlite3 stock_data.db "SELECT COUNT(*) FROM prices;"` でレコード数を確認
+```powershell
+python scripts\verify_project.py --with-db
+```
+
+この検証はDBを読み取りますが、外部APIやGoogleサービスへは書き込みません。
+外部連携の運用可否は、実コマンドの終了状態、関連DB行、生成物を別途確認します。

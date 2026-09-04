@@ -1,5 +1,9 @@
 # J-Quants Stock Data Collector - Walkthrough
 
+> [!NOTE]
+> この文書は初期コレクター実装時の記録です。現行の導入・運用手順は
+> `README.md`と`docs/CODEX_MIGRATION.md`を参照してください。
+
 ## 概要
 J-Quants API (Premium Plan) を使用して日本株データを収集し、SQLiteデータベースに保存するスクリプトを実装完了。
 
@@ -22,34 +26,25 @@ J-Quants API (Premium Plan) を使用して日本株データを収集し、SQLi
 
 ## 検証結果
 
-```bash
-# インポートテスト
-python -c "from src.client import JQuantsClient; from src.database import StockDatabase; from src.collector import DataCollector; print('All imports OK!')"
-# → All imports OK!
-
-# DB初期化テスト
-python -c "from src.database import StockDatabase; db = StockDatabase('test.db'); print(f'Count: {db.get_price_count()}')"
-# → Count: 0
+```powershell
+python scripts\verify_project.py
+python scripts\verify_project.py --with-db
 ```
 
 ## 使用方法
 
-```bash
+```powershell
 # 1. 環境設定
 cd C:\Users\yke\Projects\jquants-stock-collector
-cp .env.example .env
+Copy-Item .env.example .env
 # .envを編集してJQUANTS_API_KEYを設定
 
 # 2. 実行
 python main.py --start 2014-01-01 --end 2024-12-23
 ```
 
-## 次のステップ
+## 現在の後続作業
 
-> [!IMPORTANT]
-> **時価総額データの取得方法**は、実際にAPIを叩いて確認が必要です。
-> 
-> `.env`にAPIキーを設定後、以下のコマンドで確認してください：
-> ```bash
-> python -c "from src.client import JQuantsClient; print(JQuantsClient().get_listed_info().keys())"
-> ```
+- 時価総額フィルターを再導入する場合は、基準日と株式分割後の株数基準を検証する。
+- 定期処理の状態確認には`python scripts\audit_scheduled_operations.py`を使う。
+- 外部APIを使う確認は、対象と副作用を明示してから個別に実行する。

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import importlib.util
+import json
 import tempfile
 import unittest
 from datetime import date
@@ -95,6 +96,23 @@ class ScheduledOperationAuditTest(unittest.TestCase):
             audit.operational_status(["pending", "pending"], ["stale", "stale"]),
             "pending",
         )
+
+    def test_json_output_falls_back_to_ascii_for_legacy_windows_console(self):
+        rendered = audit.format_json_for_stdout(
+            {"overall_status": "inspection_error", "error": "アクセスは拒否されました"},
+            encoding="cp1252",
+        )
+
+        self.assertIn(r"\u30a2", rendered)
+        self.assertEqual(json.loads(rendered)["error"], "アクセスは拒否されました")
+
+    def test_json_output_keeps_unicode_when_console_supports_it(self):
+        rendered = audit.format_json_for_stdout(
+            {"error": "アクセスは拒否されました"},
+            encoding="utf-8",
+        )
+
+        self.assertIn("アクセスは拒否されました", rendered)
 
 
 if __name__ == "__main__":

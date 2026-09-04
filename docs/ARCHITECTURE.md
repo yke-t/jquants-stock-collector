@@ -12,8 +12,9 @@ J-Quants APIを使用して日本株データを収集・分析し、NISA向け�
 jquants-stock-collector/
 ├── main.py                  # エントリポイント（J-Quantsデータ収集）
 ├── run_daily.bat            # 日次自動実行バッチ
-├── requirements.txt         # 依存ライブラリ
-├── stock_data.db            # SQLiteデータベース（約1.3GB）
+├── requirements.txt         # 依存ライブラリの許容範囲
+├── requirements.lock.txt    # Python 3.11検証済みの固定依存
+├── stock_data.db            # SQLiteデータベース（Git対象外）
 ├── daily_operation.log      # 運用ログ
 ├── secret_key.json          # GCPサービスアカウントキー（git対象外）
 ├── .env                     # 環境変数（git対象外）
@@ -79,7 +80,7 @@ sequenceDiagram
     participant BQ as BigQuery
     
     Scheduler->>Bat: 毎日 17:00 起動
-    Bat->>Data: STEP1: J-Quants or yfinance
+    Bat->>Data: STEP1: yfinance（日次の現在設定）
     Data-->>Bat: データ更新完了
     Bat->>Scan: STEP2: シグナルスキャン
     Scan->>News: ニュース分析
@@ -183,25 +184,23 @@ graph TD
 JQUANTS_API_KEY=your_api_key_here
 GOOGLE_CSE_API_KEY=your_google_cse_api_key
 GOOGLE_CSE_ID=your_search_engine_id
+GOOGLE_SERVICE_ACCOUNT_FILE=path_to_service_account_json
+GOOGLE_SPREADSHEET_KEY=your_signal_spreadsheet_id
+GOOGLE_DRIVE_EXPORT_SPREADSHEET_KEY=your_export_spreadsheet_id
 ```
 
-### 依存ライブラリ (requirements.txt)
-```
-jquants-api-client>=2.0.0
-pandas>=2.0.0
-python-dotenv>=1.0.0
-tqdm>=4.65.0
-gspread>=5.10.0
-google-auth>=2.20.0
-yfinance>=1.0
-pandas-gbq>=0.19.0
-requests>=2.28.0
+### 依存ライブラリ
+
+通常は個別バージョン一覧をこの文書へ複製せず、検証済みロックを使用します。
+
+```powershell
+python -m pip install -r requirements.lock.txt
+python -m pip check
 ```
 
 ### GCP設定
-- **プロジェクトID:** nisa-jquant
-- **BigQueryデータセット:** stock_data
-- **テーブル:** prices, fundamentals
+- プロジェクトID、データセット、スプレッドシートIDは`.env`で管理
+- BigQuery対象テーブル: prices, fundamentals
 - **Custom Search API:** 有効化済み（100回/日無料）
 - **Programmable Search Engine:** ウェブ全体を検索
 
@@ -209,17 +208,28 @@ requests>=2.28.0
 
 ## run_daily.bat 設定
 
-```batch
-:: データソース選択
-set USE_YFINANCE=0  :: J-Quants使用
-set USE_YFINANCE=1  :: yfinance使用（解約後）
-```
+追跡中の`run_daily.bat`は`USE_YFINANCE=1`で、17:00の日次株価更新に
+yfinanceを使用します。J-Quants V2キーは、`main.py`による明示的な収集と
+18:00の配当財務同期で使用します。
+
+3つのバッチ入口は`scripts/run_with_lock.ps1`を経由し、共通mutexで同時実行を
+防止します。運用ログは10MiB以上でローテーションし、直近5世代を保持します。
 
 ---
 
 ## タスクスケジューラ設定（Windows）
 
-日次バッチ `run_daily.bat` をWindowsタスクスケジューラで17:00に自動実行する場合の推奨設定：
+現在のタスクは次の構成です。
+
+- `NISA-JQuant Daily`: 月〜金 17:00
+- `NISA-JQuant Dividend Daily`: 月〜金 18:00
+- `SnowMoney_Monthly_Eval`: 毎月1日 09:00
+
+定義の導入・整合化には、管理者PowerShellから
+`scripts/configure_task_scheduler.ps1`を使用します。現在状態の読み取り専用監査は、
+18:00フローの終了後に`python scripts/audit_scheduled_operations.py`で実施します。
+
+推奨設定：
 
 | 設定項目 | 推奨値 | 理由 |
 |----------|--------|------|

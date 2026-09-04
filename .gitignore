@@ -50,6 +50,7 @@ env/
 # Generated evaluation charts
 charts/*.png
 reports/*.csv
+reports/signal_analysis/
 
 # OS files
 .DS_Store
