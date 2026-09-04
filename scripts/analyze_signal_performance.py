@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import sqlite3
+import sys
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
@@ -21,13 +22,16 @@ import pandas as pd
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.price_basis import normalize_price_history
+
+
 DEFAULT_DATABASE = PROJECT_ROOT / "stock_data.db"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "reports" / "signal_analysis"
 DEFAULT_START_DATE = "2026-01-26"
 DEFAULT_EVAL_DAYS = 20
 RSI_PERIOD = 14
-GAP_LOW = 0.70
-GAP_HIGH = 1.40
 
 
 @dataclass(frozen=True)
@@ -59,41 +63,9 @@ def calculate_rsi(series: pd.Series, period: int = RSI_PERIOD) -> pd.Series:
 
 def add_share_basis_features(prices: pd.DataFrame) -> pd.DataFrame:
     """Normalize OHLC to one basis using explicit event factors only."""
-    priced = prices.copy()
+    priced = normalize_price_history(prices)
     if priced.empty:
         return priced
-
-    priced["date"] = pd.to_datetime(priced["date"], errors="coerce")
-    priced["code"] = priced["code"].astype(str)
-    numeric_columns = [
-        "open",
-        "high",
-        "low",
-        "close",
-        "adjustmentfactor",
-    ]
-    for column in numeric_columns:
-        priced[column] = pd.to_numeric(priced[column], errors="coerce")
-    priced = priced.sort_values(["code", "date"]).reset_index(drop=True)
-
-    priced["event_factor"] = priced["adjustmentfactor"].where(
-        priced["adjustmentfactor"].notna()
-        & (priced["adjustmentfactor"] > 0)
-        & ((priced["adjustmentfactor"] - 1.0).abs() > 1e-12),
-        1.0,
-    )
-    reverse_product = priced.groupby("code", group_keys=False)["event_factor"].apply(
-        lambda values: values.iloc[::-1].cumprod().iloc[::-1]
-    )
-    priced["basis_scale"] = reverse_product.to_numpy() / priced["event_factor"]
-    for column in ["open", "high", "low", "close"]:
-        priced[f"basis_{column}"] = priced[column] * priced["basis_scale"]
-
-    priced["previous_close"] = priced.groupby("code")["close"].shift(1)
-    priced["close_ratio"] = priced["close"] / priced["previous_close"]
-    priced["unverified_gap"] = (
-        (priced["close_ratio"] <= GAP_LOW) | (priced["close_ratio"] >= GAP_HIGH)
-    ) & (priced["event_factor"] == 1.0)
     priced["raw_rsi"] = priced.groupby("code")["close"].transform(calculate_rsi)
     priced["basis_rsi"] = priced.groupby("code")["basis_close"].transform(calculate_rsi)
     return priced

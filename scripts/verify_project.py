@@ -30,6 +30,8 @@ UNIT_TEST_MODULES = [
     "tests.test_audit_scheduled_operations",
     "tests.test_analyze_signal_performance",
     "tests.test_build_signal_analysis_report",
+    "tests.test_price_basis",
+    "tests.test_backtest_wfa",
 ]
 REQUIRED_TABLES = {
     "prices",

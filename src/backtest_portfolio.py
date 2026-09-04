@@ -186,8 +186,10 @@ class PortfolioBacktester:
             print(f"Win Rate:        {(trades_df['return'] > 0).mean():.2%}")
 
 if __name__ == "__main__":
-    bt = PortfolioBacktester()
-    bt.load_data()
-    bt.calculate_signals()
-    equity, trades = bt.run_simulation()
-    bt.print_results(equity, trades)
+    print(
+        "[DEPRECATED] Redirecting the legacy portfolio backtest command to "
+        "src.backtest_wfa."
+    )
+    from src.backtest_wfa import main
+
+    raise SystemExit(main())

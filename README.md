@@ -62,6 +62,19 @@ python scripts/build_signal_analysis_report.py `
   --output-dir reports/signal_analysis
 ```
 
+### ポートフォリオ・ウォークフォワード検証
+
+```powershell
+python -m src.backtest_wfa --start 2016-01-01 --splits 5
+```
+
+この検証はSQLiteを読み取り専用で開き、終値で生成したシグナルを翌取引日の始値で約定します。
+明示的な`adjustmentfactor`だけでOHLCを同一株式数基準へ補正し、説明できない大幅な価格断絶を持つ
+銘柄は除外します。売買手数料・スリッページ・100株単位・現金残高・最大保有数を反映し、
+拡大型の学習期間と重複しない次区間でアウト・オブ・サンプル成績を複利集計します。
+既定の出力先は`reports/wfa/`です。方法論と制約は
+[ウォークフォワード検証仕様](docs/WALK_FORWARD_BACKTEST.md)を参照してください。
+
 この分析はSQLiteを読み取り専用で開き、株式単位を明示的な調整係数で確認できる
 価格窓だけを使います。APIやGoogleサービスには接続せず、DBも更新しません。
 既存のポートフォリオ・バックテストは、約定時点、株式分割、資金制約、損益集計の
@@ -76,6 +89,8 @@ src/database.py             SQLiteスキーマと保存処理
 src/scan.py                 日次シグナル
 src/dividend_scan.py        長期配当候補
 src/dividend_backtest.py    配当戦略バックテスト
+src/price_basis.py          明示的な調整係数によるOHLC株式数基準の共通化
+src/backtest_wfa.py         翌取引日約定・資金制約付きポートフォリオWFA
 src/split_factor_backfill.py 株式分割時の限定価格修復・係数補完
 src/notifier.py             Google Sheets出力
 src/sync_bigquery.py        BigQuery差分同期

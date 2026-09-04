@@ -28,8 +28,10 @@ jquants-stock-collector/
 │   ├── update_yfinance.py   # yfinance日次データ更新（J-Quants代替）
 │   ├── sync_bigquery.py     # BigQuery差分同期
 │   ├── export_bigquery.py   # BigQuery全量エクスポート
-│   ├── backtest.py          # バックテストエンジン（WFA版）
-│   └── backtest_portfolio.py # ポートフォリオバックテスト
+│   ├── price_basis.py       # 明示的な調整係数による共通価格基準
+│   ├── backtest_wfa.py      # 翌取引日約定・資金制約付きWFA
+│   ├── backtest.py          # 旧実装（CLIはbacktest_wfaへ転送）
+│   └── backtest_portfolio.py # 旧実装（CLIはbacktest_wfaへ転送）
 ├── notebooks/
 │   └── bigquery_analysis_template.md  # Colab分析テンプレート
 └── docs/
@@ -121,7 +123,8 @@ sequenceDiagram
 | モジュール | 説明 | 出力 |
 |-----------|------|------|
 | `evaluate.py` | シグナル判定の事後評価 | コンソールレポート + PNGチャート |
-| `backtest.py` | WFAバックテスト | KPI評価 |
+| `backtest_wfa.py` | 翌取引日約定・調整価格・コスト・資金制約付きWFA | `reports/wfa/` |
+| `backtest.py` / `backtest_portfolio.py` | 旧クラスの互換保持。CLIは`backtest_wfa.py`へ転送 | - |
 
 **評価機能の使い方:**
 ```bash

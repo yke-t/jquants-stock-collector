@@ -340,5 +340,10 @@ class NisaJQuantBacktester:
 
 
 if __name__ == "__main__":
-    bt = NisaJQuantBacktester()
-    results = bt.run()
+    print(
+        "[DEPRECATED] Redirecting the legacy backtest command to "
+        "src.backtest_wfa."
+    )
+    from src.backtest_wfa import main
+
+    raise SystemExit(main())

@@ -51,6 +51,7 @@ env/
 charts/*.png
 reports/*.csv
 reports/signal_analysis/
+reports/wfa/
 
 # OS files
 .DS_Store
