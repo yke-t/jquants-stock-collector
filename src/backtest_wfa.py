@@ -402,7 +402,10 @@ class PortfolioSimulator:
                     for code, position in positions.items()
                 )
                 target_value = open_equity / self.execution.max_positions
-                for code in candidates[:slots]:
+                entries_placed = 0
+                for code in candidates:
+                    if entries_placed >= slots:
+                        break
                     row = daily.loc[code]
                     raw_open = float(row["basis_open"])
                     entry_fill = raw_open * buy_slippage
@@ -421,6 +424,7 @@ class PortfolioSimulator:
                     if total_cost > cash + 1e-7:
                         raise RuntimeError("cash constraint violated")
                     cash -= total_cost
+                    entries_placed += 1
                     position = Position(
                         code=code,
                         qty=qty,

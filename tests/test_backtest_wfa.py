@@ -247,6 +247,59 @@ class BacktestWfaTest(unittest.TestCase):
         self.assertLessEqual(equity["positions"].max(), 2)
         self.assertTrue((equity["cash"] >= 0).all())
 
+    def test_unaffordable_candidate_does_not_consume_open_slot(self):
+        dates = pd.bdate_range("2026-01-05", periods=3)
+        prices = prepared_rows(
+            dates,
+            codes=("10000", "20000"),
+            signal_date=dates[0],
+            overrides={
+                (dates[0], "20000"): {
+                    "basis_open": 5.0,
+                    "basis_high": 5.0,
+                    "basis_low": 5.0,
+                    "basis_close": 5.0,
+                },
+                (dates[1], "10000"): {
+                    "basis_open": 20.0,
+                    "basis_high": 20.0,
+                    "basis_low": 20.0,
+                    "basis_close": 20.0,
+                },
+                (dates[1], "20000"): {
+                    "basis_open": 5.0,
+                    "basis_high": 5.0,
+                    "basis_low": 5.0,
+                    "basis_close": 5.0,
+                },
+                (dates[2], "20000"): {
+                    "basis_open": 6.0,
+                    "basis_high": 6.0,
+                    "basis_low": 6.0,
+                    "basis_close": 6.0,
+                },
+            },
+        )
+        execution = ExecutionConfig(
+            initial_capital=1_000,
+            max_positions=1,
+            lot_size=100,
+            commission_bps=0,
+            slippage_bps=0,
+        )
+
+        equity, trades = PortfolioSimulator(prices, execution).run(
+            self.params,
+            start_date=dates[0],
+            end_date=dates[-1],
+        )
+
+        self.assertEqual(trades["code"].tolist(), ["20000"])
+        self.assertEqual(trades.iloc[0]["qty"], 200)
+        self.assertEqual(equity.iloc[-1]["equity"], 1_200)
+        self.assertLessEqual(equity["positions"].max(), 1)
+        self.assertTrue((equity["cash"] >= 0).all())
+
     def test_weekend_end_date_liquidates_on_last_available_session(self):
         dates = pd.bdate_range("2026-01-05", periods=3)
         prices = prepared_rows(dates, signal_date=dates[0])
