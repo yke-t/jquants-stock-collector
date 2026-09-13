@@ -208,6 +208,24 @@ seven-day freshness, task/run correspondence, missed runs, and the capacity
 limit. Backup failures block forward evaluation and are reported without
 automatic repair, deletion, or rerun.
 
+## Data coverage audit
+
+`python scripts\audit_data_coverage.py` opens `stock_data.db` read-only and
+reports three separate gates: listed-issue master freshness, daily-price
+coverage for the configured Small 1 / Small 2 / Mid400 strategy universe, and
+dividend-financial coverage and refresh attempts. The scheduled-operations
+audit includes this result, so stale reference data or a material coverage drop
+cannot be hidden by otherwise successful batch exit codes.
+
+`python scripts\refresh_listed_info.py` is a live J-Quants dry-run by default.
+It validates source row count, uniqueness, snapshot age, universe changes, and
+projected daily-price coverage without changing SQLite. Applying the refresh
+requires `--apply` and the JSON from a verified backup and restore drill that
+matches the current database. The table swap is performed in one transaction,
+then checked with `PRAGMA quick_check` and row/date assertions. See
+[`DATA_COVERAGE.md`](DATA_COVERAGE.md) for thresholds and the 2026-09-14
+baseline.
+
 ## Migration acceptance
 
 The final P7f acceptance audit passed on 2026-09-13. The repository and CI,

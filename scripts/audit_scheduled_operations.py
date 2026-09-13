@@ -18,6 +18,7 @@ if str(SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_ROOT))
 
 import backup_retention
+import audit_data_coverage
 
 
 BACKUP_TASK_NAME = "NISA-JQuant Database Backup"
@@ -357,12 +358,13 @@ def audit_database_backup(
 def combine_operational_and_backup_status(
     operation_status: str,
     backup_status: str,
+    data_coverage_status: str = "pass",
 ) -> str:
-    if operation_status == "fail" or backup_status == "fail":
+    if "fail" in (operation_status, backup_status, data_coverage_status):
         return "fail"
     if operation_status == "pending":
         return "pending"
-    if backup_status in ("pass", "not_due"):
+    if backup_status in ("pass", "not_due") and data_coverage_status == "pass":
         return "pass"
     return "pending"
 
@@ -412,6 +414,10 @@ def build_audit(
         backup_directory,
         audited_at,
     )
+    data_coverage = audit_data_coverage.build_audit(
+        repository_root / "stock_data.db",
+        target_date,
+    )
     return {
         "schema_version": "1.0",
         "audited_at": audited_at.isoformat(),
@@ -419,11 +425,13 @@ def build_audit(
         "overall_status": combine_operational_and_backup_status(
             operation_status,
             backup["status"],
+            data_coverage["overall_status"],
         ),
         "workflows": workflows,
         "database": database,
         "artifacts": artifacts,
         "database_backup": backup,
+        "data_coverage": data_coverage,
     }
 
 

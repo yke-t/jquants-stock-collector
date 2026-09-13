@@ -97,6 +97,8 @@ src/notifier.py             Google Sheets出力
 src/sync_bigquery.py        BigQuery差分同期
 scripts/verify_project.py   Codex向けオフライン検証
 scripts/audit_scheduled_operations.py 定期処理の読み取り専用監査
+scripts/audit_data_coverage.py 銘柄マスター・日次価格・配当財務の鮮度／カバー率監査
+scripts/refresh_listed_info.py J-Quants銘柄マスターの検証付き更新（既定はドライラン）
 scripts/analyze_signal_performance.py 保存シグナルの株式単位検証・成績分析
 scripts/build_signal_analysis_report.py 分析JSONから検証用レポート定義を構築
 scripts/run_with_lock.ps1   BAT共通の排他実行・ログ世代管理
@@ -112,6 +114,32 @@ tests/integration/          明示実行する外部APIテスト
 配当スキャナと配当バックテストは、明示的な`adjustmentfactor`がある場合だけ1株指標を同じ株数基準へ補正します。大きな価格断絶に係数がない銘柄は、推測で補正せず`DATA_WARNING`として利回り計算から除外します。`src/split_factor_backfill.py`は、J-Quants原値のドライラン照合、更新対象とバックアップの一致確認、限定価格修復・係数補完を1トランザクションで行います。各ローカルDBは個別にバックアップしたうえで適用し、`python scripts/verify_project.py --with-db`で再検証してください。
 
 配当財務の日次同期は`--stale-days 7 --limit 500`で、未取得銘柄を先に、取得済み銘柄を最終更新が古い順にローテーション更新します。正常な空応答も取得試行として`sync_progress`へ記録するため、財務データのない銘柄で処理順が停滞しません。株式分割を含む実データ回帰確認は完了していますが、運用コードを変更した場合は、実行結果・DB更新・生成物を再確認してから運用可能と判断してください。
+
+### データ鮮度と銘柄カバー率
+
+次のコマンドはDBを読み取り専用で開き、銘柄マスター、戦略対象の日次価格、
+配当財務の鮮度とカバー率を一括監査します。
+
+```powershell
+python scripts\audit_data_coverage.py
+```
+
+日次価格の対象は現行戦略と同じ`TOPIX Small 1`、`TOPIX Small 2`、
+`TOPIX Mid400`です。全上場銘柄を対象にしているわけではありません。配当財務の
+開示日鮮度は、J-Quants Freeプランの12週間遅延を前提に84日＋21日の許容幅で
+判定し、実際の取得試行日時は別に7日以内かを確認します。基準、現状値、制約は
+[データカバー率運用](docs/DATA_COVERAGE.md)を参照してください。
+
+銘柄マスターの更新は最初にドライランし、行数、日付、重複、差分、更新後の価格
+カバー率を確認します。
+
+```powershell
+python scripts\refresh_listed_info.py
+```
+
+`--apply`は復元訓練済みバックアップの検証JSONを必須とし、銘柄マスターだけを
+1つのSQLiteトランザクションで置き換えます。J-QuantsへのアクセスとDB更新を伴う
+ため、通常のオフライン検証には含めません。
 
 ### SQLiteバックアップと復元訓練
 

@@ -200,6 +200,16 @@ class ScheduledOperationAuditTest(unittest.TestCase):
             "pass",
         )
 
+    def test_data_coverage_failure_overrides_operational_pass(self):
+        self.assertEqual(
+            audit.combine_operational_and_backup_status("pass", "pass", "fail"),
+            "fail",
+        )
+        self.assertEqual(
+            audit.combine_operational_and_backup_status("pass", "pass", "pass"),
+            "pass",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
