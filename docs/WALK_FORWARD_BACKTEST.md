@@ -10,7 +10,8 @@ python -m src.backtest_wfa --start 2016-01-01 --splits 5
 ```
 
 主な引数は`--end`、`--initial-capital`、`--max-positions`、`--lot-size`、
-`--commission-bps`、`--slippage-bps`、`--allocation-policy`、`--max-entry-weight`です。
+`--commission-bps`、`--slippage-bps`、`--allocation-policy`、`--max-entry-weight`、
+`--train-max-drawdown-floor`です。
 結果を保存しない確認には`--no-save`を使います。
 SQLiteはURIの`mode=ro`で開くため、この処理はDBを更新しません。
 
@@ -113,11 +114,32 @@ python -m src.backtest_wfa `
 完全WFAのCAGRは11.46%で15%目標に届かず、改善も小さいため、既定値は
 `fixed-equal-weight`のまま維持します。詳細は[P6g評価結果](P6G_ALLOCATION_RESULT.md)を参照してください。
 
+## P6h学習最大ドローダウン制約
+
+`--train-max-drawdown-floor`を指定すると、各foldの学習最大ドローダウンが閾値以上の
+パラメータ候補だけを既存スコアで順位付けします。最大DDが欠損・非有限値の候補は除外し、
+適格候補がゼロなら無制約方式へ戻らず明示的に失敗します。既定値は未指定です。
+
+```powershell
+python -m src.backtest_wfa `
+  --start 2024-01-01 `
+  --end 2026-09-02 `
+  --splits 3 `
+  --allocation-policy remaining-slots-capped `
+  --max-entry-weight 0.10 `
+  --train-max-drawdown-floor -0.20
+```
+
+[P6h事前登録](P6H_PREREGISTRATION.md)に従った再WFAでは、適格候補数がfold 1で4/4、
+fold 2と3で0/4となり、fold 2で明示的に停止しました。このため制約付きOOS指標は算出せず、
+既定選択規則へ採用していません。詳細は
+[P6h評価結果](P6H_DRAWDOWN_CONSTRAINT_RESULT.md)を参照してください。
+
 ## 出力
 
 `reports/wfa/`に次を出力します。このディレクトリはGit管理対象外です。
 
 - `wfa_summary.json`: 集計値、実行条件、方法論、データ品質
-- `wfa_folds.csv`: 区間、選択パラメータ、学習／テスト成績
+- `wfa_folds.csv`: 区間、選択パラメータ、候補数、適格候補数、学習／テスト成績
 - `wfa_equity.csv`: 連結したアウト・オブ・サンプル資産曲線
 - `wfa_trades.csv`: コスト控除後のアウト・オブ・サンプル取引

@@ -9,6 +9,7 @@ from src.backtest_wfa import (
     ExecutionConfig,
     PortfolioSimulator,
     StrategyParams,
+    _select_optimization_candidate,
     build_walk_forward_folds,
     connect_read_only,
     load_price_history,
@@ -449,6 +450,55 @@ class BacktestWfaTest(unittest.TestCase):
             self.assertFalse(set(train) & set(test))
         self.assertLess(len(folds[0][0]), len(folds[-1][0]))
 
+    def test_train_drawdown_floor_excludes_higher_score_violating_candidate(self):
+        violating = StrategyParams(dip_threshold=0.95)
+        feasible = StrategyParams(dip_threshold=0.98)
+        candidates = [
+            (0.50, violating, {"max_drawdown": -0.25}),
+            (0.20, feasible, {"max_drawdown": -0.15}),
+        ]
+
+        selected, eligible_count = _select_optimization_candidate(
+            candidates,
+            train_max_drawdown_floor=-0.20,
+            fold_number=1,
+        )
+
+        self.assertEqual(selected[1], feasible)
+        self.assertEqual(eligible_count, 1)
+
+    def test_train_drawdown_floor_does_not_fallback_when_none_feasible(self):
+        candidates = [
+            (0.50, self.params, {"max_drawdown": -0.25}),
+            (
+                0.20,
+                StrategyParams(dip_threshold=0.98),
+                {"max_drawdown": float("nan")},
+            ),
+        ]
+
+        with self.assertRaisesRegex(ValueError, "no parameter candidate satisfies"):
+            _select_optimization_candidate(
+                candidates,
+                train_max_drawdown_floor=-0.20,
+                fold_number=2,
+            )
+
+    def test_walk_forward_rejects_invalid_train_drawdown_floor(self):
+        dates = pd.bdate_range("2026-01-05", periods=12)
+        prices = prepared_rows(dates, signal_date=dates[4])
+
+        with self.assertRaisesRegex(ValueError, "must be in"):
+            run_walk_forward(
+                prices,
+                start_date=dates[0].date().isoformat(),
+                end_date=dates[-1].date().isoformat(),
+                n_splits=3,
+                execution=ExecutionConfig(),
+                param_grid=(self.params,),
+                train_max_drawdown_floor=0.01,
+            )
+
     def test_walk_forward_returns_only_disjoint_test_dates(self):
         dates = pd.bdate_range("2026-01-05", periods=12)
         prices = prepared_rows(
@@ -471,6 +521,7 @@ class BacktestWfaTest(unittest.TestCase):
             execution=execution,
             param_grid=(self.params,),
             minimum_train_trades=0,
+            train_max_drawdown_floor=-0.20,
         )
 
         folds = result["folds"]
@@ -485,6 +536,12 @@ class BacktestWfaTest(unittest.TestCase):
         self.assertEqual(result["summary"]["folds"], 3)
         self.assertIn("cagr_passed", result["summary"]["targets"])
         self.assertIn("max_drawdown_passed", result["summary"]["targets"])
+        self.assertEqual(
+            result["summary"]["selection"]["train_max_drawdown_floor"],
+            -0.20,
+        )
+        self.assertTrue((folds["parameter_candidates"] == 1).all())
+        self.assertTrue((folds["eligible_parameter_candidates"] == 1).all())
         self.assertTrue((folds["test_min_cash"] >= 0).all())
         self.assertTrue((folds["test_max_positions"] <= 1).all())
 

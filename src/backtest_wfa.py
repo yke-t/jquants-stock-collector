@@ -595,6 +595,45 @@ def _optimization_score(summary: dict[str, Any], minimum_trades: int) -> float:
     return float(summary["cagr"] + summary["max_drawdown"] - trade_penalty)
 
 
+def _validate_train_max_drawdown_floor(value: float | None) -> None:
+    if value is None:
+        return
+    if not math.isfinite(value) or not -1 <= value <= 0:
+        raise ValueError("train_max_drawdown_floor must be in [-1, 0]")
+
+
+def _select_optimization_candidate(
+    candidates: Sequence[tuple[float, StrategyParams, dict[str, Any]]],
+    *,
+    train_max_drawdown_floor: float | None,
+    fold_number: int,
+) -> tuple[tuple[float, StrategyParams, dict[str, Any]], int]:
+    indexed_candidates = list(enumerate(candidates))
+    if train_max_drawdown_floor is not None:
+        indexed_candidates = [
+            indexed
+            for indexed in indexed_candidates
+            if (
+                indexed[1][2].get("max_drawdown") is not None
+                and math.isfinite(float(indexed[1][2]["max_drawdown"]))
+                and float(indexed[1][2]["max_drawdown"])
+                >= train_max_drawdown_floor
+            )
+        ]
+    if not indexed_candidates:
+        raise ValueError(
+            "fold "
+            f"{fold_number}: no parameter candidate satisfies "
+            "train_max_drawdown_floor="
+            f"{train_max_drawdown_floor}"
+        )
+    _, candidate = max(
+        indexed_candidates,
+        key=lambda indexed: (indexed[1][0], -indexed[0]),
+    )
+    return candidate, len(indexed_candidates)
+
+
 def combine_oos_equity(
     curves: Iterable[pd.DataFrame], initial_capital: float
 ) -> pd.DataFrame:
@@ -628,9 +667,11 @@ def run_walk_forward(
     execution: ExecutionConfig,
     param_grid: Sequence[StrategyParams] = DEFAULT_PARAM_GRID,
     minimum_train_trades: int = 5,
+    train_max_drawdown_floor: float | None = None,
 ) -> dict[str, Any]:
     if not param_grid:
         raise ValueError("param_grid cannot be empty")
+    _validate_train_max_drawdown_floor(train_max_drawdown_floor)
     execution.validate()
     simulator = PortfolioSimulator(prepared_prices, execution)
     start = pd.Timestamp(start_date)
@@ -663,9 +704,10 @@ def run_walk_forward(
                     train_summary,
                 )
             )
-        _, candidate = max(
-            enumerate(candidates),
-            key=lambda indexed: (indexed[1][0], -indexed[0]),
+        candidate, eligible_candidate_count = _select_optimization_candidate(
+            candidates,
+            train_max_drawdown_floor=train_max_drawdown_floor,
+            fold_number=fold_number,
         )
         score, best_params, train_summary = candidate
         test_equity, test_trades = simulator.run(
@@ -695,6 +737,9 @@ def run_walk_forward(
                 "test_end": test_dates[-1].date().isoformat(),
                 **{f"param_{key}": value for key, value in asdict(best_params).items()},
                 "optimization_score": score,
+                "parameter_candidates": len(candidates),
+                "eligible_parameter_candidates": eligible_candidate_count,
+                "train_max_drawdown_floor": train_max_drawdown_floor,
                 "train_trades": train_summary.get("trades", 0),
                 "train_cagr": train_summary.get("cagr"),
                 "train_max_drawdown": train_summary.get("max_drawdown"),
@@ -733,12 +778,19 @@ def run_walk_forward(
             summary["max_drawdown"] >= TARGET_MAX_DRAWDOWN
         ),
     }
+    summary["selection"] = {
+        "train_max_drawdown_floor": train_max_drawdown_floor,
+        "empty_candidate_policy": "error",
+    }
     summary["methodology"] = {
         "signal_time": "session close",
         "entry_time": "next available session open",
         "same_bar_exit_order": "prior-high stop first; new intraday high applies next session",
         "share_basis": "explicit adjustment factors; unverified codes excluded",
-        "optimization": "expanding-window train, disjoint next-block test",
+        "optimization": (
+            "expanding-window train, optional train drawdown hard constraint, "
+            "disjoint next-block test"
+        ),
         "constraints": "cash >= 0, fixed lot size, maximum positions enforced",
         "universe_limitation": (
             "latest fundamentals.scalecat; historical membership unavailable"
@@ -780,6 +832,14 @@ def parse_args() -> argparse.Namespace:
         default="fixed-equal-weight",
     )
     parser.add_argument("--max-entry-weight", type=float, default=0.10)
+    parser.add_argument(
+        "--train-max-drawdown-floor",
+        type=float,
+        help=(
+            "Optional training maximum-drawdown floor, for example -0.20. "
+            "A fold fails if no parameter candidate satisfies it."
+        ),
+    )
     parser.add_argument("--output-dir", type=Path, default=REPORTS_DIR / "wfa")
     parser.add_argument("--no-save", action="store_true")
     return parser.parse_args()
@@ -811,6 +871,7 @@ def main() -> int:
         end_date=args.end,
         n_splits=args.splits,
         execution=execution,
+        train_max_drawdown_floor=args.train_max_drawdown_floor,
     )
     result["summary"]["data_quality"] = quality
     if not args.no_save:
