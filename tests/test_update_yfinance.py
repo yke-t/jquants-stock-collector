@@ -115,6 +115,36 @@ class UpdateYfinanceTest(unittest.TestCase):
             actions=True,
         )
 
+    @patch("src.update_yfinance.yf.Ticker")
+    def test_successor_prices_are_not_stored_under_predecessor_code(self, ticker):
+        ticker.return_value.history.return_value = pd.DataFrame(
+            [
+                {
+                    "Open": 995.0,
+                    "High": 995.0,
+                    "Low": 995.0,
+                    "Close": 995.0,
+                    "Volume": 0,
+                    "Stock Splits": 0,
+                },
+                {
+                    "Open": 1070.0,
+                    "High": 1070.0,
+                    "Low": 1002.0,
+                    "Close": 1047.0,
+                    "Volume": 106700,
+                    "Stock Splits": 0,
+                },
+            ],
+            index=pd.to_datetime(["2026-06-29", "2026-07-01"]),
+        )
+
+        rows = fetch_single_stock(
+            "4449.T", "44490", "2026-06-29", "2026-07-02"
+        )
+
+        self.assertEqual([row["date"] for row in rows], ["2026-06-29"])
+
     def test_upsert_preserves_existing_jquants_adjusted_columns(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             db_path = Path(temp_dir) / "prices.db"

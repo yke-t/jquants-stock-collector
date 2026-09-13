@@ -20,6 +20,12 @@ DB_PATH = DATABASE_PATH
 BATCH_SIZE = 20  # 一度に取得する銘柄数（レートリミット対策）
 WAIT_BETWEEN_BATCHES = 3  # バッチ間の待機秒数
 
+# Known security-code transitions. Rows after the cutoff belong to the successor
+# security and must never be stored under the predecessor J-Quants code.
+PRICE_CODE_CUTOFFS = {
+    "44490": "2026-06-29",  # giftee -> giftee Group (590A0)
+}
+
 
 def get_target_codes(db_path: Path) -> list:
     """fundamentalsテーブルから対象銘柄コードを取得"""
@@ -62,10 +68,14 @@ def fetch_single_stock(ticker: str, code: str, start_date: str, end_date: str) -
         
         results = []
         for date_idx, row in hist.iterrows():
+            price_date = date_idx.strftime('%Y-%m-%d')
+            cutoff = PRICE_CODE_CUTOFFS.get(str(code))
+            if cutoff is not None and price_date > cutoff:
+                continue
             split_ratio = float(row.get('Stock Splits', 0) or 0)
             adjustment_factor = (1.0 / split_ratio) if split_ratio > 0 else None
             results.append({
-                'date': date_idx.strftime('%Y-%m-%d'),
+                'date': price_date,
                 'code': code,
                 'open': float(row.get('Open', 0)),
                 'high': float(row.get('High', 0)),

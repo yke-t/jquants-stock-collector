@@ -235,6 +235,13 @@ gaps match JPX-published delistings retained by the delayed Free-plan master.
 The newer partial date is reported separately so a one-code or targeted update
 cannot falsely become the coverage denominator.
 
+The 4449 gap exposed a separate code-transition issue: 38 rows after the old
+giftee security's 2026-06-29 delisting had been stored under 44490. Thirty-seven
+active rows matched the successor 590A yfinance OHLCV exactly. After another
+verified backup, all 38 post-cutoff rows were moved to 590A0 without changing
+the total price row count, current 590A0 prices were caught up, and the daily
+fetch path was guarded against storing future post-cutoff rows under 44490.
+
 ## Migration acceptance
 
 The final P7f acceptance audit passed on 2026-09-13. The repository and CI,
