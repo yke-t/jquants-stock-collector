@@ -4,6 +4,7 @@ yfinance日次データ更新スクリプト
 J-Quants解約後、yfinanceを使用して日次株価データを更新する。
 既存のDBに追記する形で動作。
 """
+import argparse
 import sqlite3
 import pandas as pd
 import yfinance as yf
@@ -159,7 +160,24 @@ def update_database(df: pd.DataFrame, db_path: Path) -> int:
     return count
 
 
-def run_daily_update() -> int:
+def normalize_requested_codes(codes: list[str]) -> list[str]:
+    """Normalize an explicit catch-up list while preserving input order."""
+    normalized = []
+    seen = set()
+    for code in codes:
+        value = str(code).strip().upper()
+        if not value:
+            raise ValueError("Stock code must not be blank")
+        if value not in seen:
+            normalized.append(value)
+            seen.add(value)
+    return normalized
+
+
+def run_daily_update(
+    requested_codes: list[str] | None = None,
+    lookback_days: int = 7,
+) -> int:
     """日次更新を実行"""
     print("="*60)
     print(f"yfinance Daily Update - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
@@ -171,8 +189,13 @@ def run_daily_update() -> int:
     
     # 1. 対象銘柄を取得
     print("[INFO] Loading target codes from DB...")
-    codes = get_target_codes(DB_PATH)
-    print(f"[INFO] Target stocks: {len(codes)}")
+    if requested_codes is None:
+        codes = get_target_codes(DB_PATH)
+        selection = "configured strategy universe"
+    else:
+        codes = normalize_requested_codes(requested_codes)
+        selection = "explicit catch-up list"
+    print(f"[INFO] Target stocks: {len(codes)} ({selection})")
     
     if not codes:
         print("[ERROR] No target codes found.")
@@ -180,7 +203,7 @@ def run_daily_update() -> int:
     
     # 2. 取得期間を設定（直近5営業日分を更新）
     end_date = datetime.now()
-    start_date = end_date - timedelta(days=7)  # 余裕を持って7日前から
+    start_date = end_date - timedelta(days=lookback_days)
     
     print(f"[INFO] Fetching: {start_date.strftime('%Y-%m-%d')} -> {end_date.strftime('%Y-%m-%d')}")
     
@@ -208,5 +231,30 @@ def run_daily_update() -> int:
     return 0
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Fetch recent prices from yfinance and update SQLite."
+    )
+    parser.add_argument(
+        "--code",
+        action="append",
+        dest="codes",
+        help="Fetch only this J-Quants code; repeat for multiple codes",
+    )
+    parser.add_argument(
+        "--lookback-days",
+        type=int,
+        default=7,
+        help="Calendar-day lookback for the yfinance request (default: 7)",
+    )
+    args = parser.parse_args()
+    if args.lookback_days <= 0:
+        parser.error("--lookback-days must be positive")
+    return args
+
+
 if __name__ == "__main__":
-    raise SystemExit(run_daily_update())
+    cli_args = parse_args()
+    raise SystemExit(
+        run_daily_update(cli_args.codes, lookback_days=cli_args.lookback_days)
+    )

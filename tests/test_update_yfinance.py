@@ -13,10 +13,52 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src import update_yfinance
-from src.update_yfinance import fetch_single_stock, update_database
+from src.update_yfinance import (
+    fetch_single_stock,
+    normalize_requested_codes,
+    update_database,
+)
 
 
 class UpdateYfinanceTest(unittest.TestCase):
+    def test_requested_codes_are_normalized_and_deduplicated(self):
+        self.assertEqual(
+            normalize_requested_codes([" 212a0 ", "212A0", "83030"]),
+            ["212A0", "83030"],
+        )
+
+    def test_explicit_codes_bypass_configured_universe(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "prices.db"
+            db_path.touch()
+            fetched = pd.DataFrame([{
+                "date": "2026-09-11",
+                "code": "212A0",
+                "open": 1.0,
+                "high": 1.0,
+                "low": 1.0,
+                "close": 1.0,
+                "volume": 1,
+                "adjustmentfactor": None,
+            }])
+            with (
+                patch.object(update_yfinance, "DB_PATH", db_path),
+                patch.object(update_yfinance, "get_target_codes") as target_codes,
+                patch.object(
+                    update_yfinance,
+                    "fetch_yfinance_data",
+                    return_value=fetched,
+                ) as fetch,
+                patch.object(update_yfinance, "update_database", return_value=1),
+            ):
+                self.assertEqual(
+                    update_yfinance.run_daily_update(["212a0"], lookback_days=14),
+                    0,
+                )
+
+        target_codes.assert_not_called()
+        self.assertEqual(fetch.call_args.args[0], ["212A0"])
+
     @patch("src.update_yfinance.yf.Ticker")
     def test_single_stock_fetch_propagates_network_failure(self, ticker):
         ticker.return_value.history.side_effect = RuntimeError("network down")

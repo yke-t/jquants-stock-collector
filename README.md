@@ -32,6 +32,13 @@ python -m src.sync_bigquery
 
 Windows Task Scheduler用の入口は`run_daily.bat`です。
 
+銘柄マスター更新後など、限定した銘柄だけを再取得する場合は`--code`を繰り返して
+指定できます。指定がない通常実行は、従来どおり戦略対象全体を更新します。
+
+```powershell
+python -m src.update_yfinance --lookback-days 14 --code 212A0 --code 83030
+```
+
 ### 長期配当候補
 
 ```powershell
