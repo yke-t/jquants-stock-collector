@@ -135,6 +135,20 @@ fold 2と3で0/4となり、fold 2で明示的に停止しました。このた�
 既定選択規則へ採用していません。詳細は
 [P6h評価結果](P6H_DRAWDOWN_CONSTRAINT_RESULT.md)を参照してください。
 
+## P6i固定戦略の前向き評価
+
+P6d〜P6hで使用したOOSを追加調整へ使わないため、2026-09-02までのデータだけで
+P6f既定方式のパラメータを1組選び、2026-09-03以降を252取引日評価します。
+
+```powershell
+python -m src.forward_evaluation --db stock_data.db
+```
+
+固定値は`config/p6i_forward_evaluation.json`へ保存しています。CLIはバックテストソースの
+SHA-256、候補グリッド、選択候補を検証し、SQLiteを読み取り専用で開きます。
+252取引日未満は`collecting`として目標合否を`null`にし、満期後は最初の252取引日で
+成績を固定します。詳細は[P6i前向き評価](P6I_FORWARD_EVALUATION.md)を参照してください。
+
 ## 出力
 
 `reports/wfa/`に次を出力します。このディレクトリはGit管理対象外です。
