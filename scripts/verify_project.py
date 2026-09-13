@@ -34,6 +34,7 @@ UNIT_TEST_MODULES = [
     "tests.test_backtest_wfa",
     "tests.test_forward_evaluation",
     "tests.test_backup_database",
+    "tests.test_backup_retention",
 ]
 REQUIRED_TABLES = {
     "prices",

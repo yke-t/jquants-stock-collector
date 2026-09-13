@@ -171,8 +171,8 @@ table row count with the source snapshot. With `--restore-drill`, it restores
 the backup into a temporary database in the backup directory, repeats the same
 checks, and removes only that temporary restore directory afterward.
 
-Keep backups and their verification JSON outside the repository. The command
-does not implement retention deletion and never replaces `stock_data.db`.
+Keep backups and their verification JSON outside the repository. The standalone
+backup command does not delete older files and never replaces `stock_data.db`.
 Restoring over the production path remains a separate, explicitly approved
 operation that requires stopped workflows and another verified checkpoint.
 
@@ -187,6 +187,14 @@ and identical row counts: 36,211 `dividend_financials`, 4,424 `fundamentals`,
 10,315,292 `prices`, 1,981 `signals`, and 4,425 `sync_progress`. The temporary
 restore directory was removed after verification. The retained backup and JSON
 were not written into the repository, and the source database was not modified.
+
+The managed weekly path uses `scripts\run_database_backup.ps1` under the same
+global mutex as the data workflows. It keeps eight verified scheduled pairs,
+never fewer than one, within a 20 GiB directory limit. Only strict timestamped
+database/result pairs with matching successful backup and restore evidence are
+eligible for pruning. Manual backups, invalid or incomplete pairs, symlinks,
+and unrelated files are protected. See
+[`P7G_BACKUP_RETENTION.md`](P7G_BACKUP_RETENTION.md) for the policy and evidence.
 
 ## Migration acceptance
 

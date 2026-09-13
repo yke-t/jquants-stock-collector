@@ -100,6 +100,9 @@ scripts/audit_scheduled_operations.py 定期処理の読み取り専用監査
 scripts/analyze_signal_performance.py 保存シグナルの株式単位検証・成績分析
 scripts/build_signal_analysis_report.py 分析JSONから検証用レポート定義を構築
 scripts/run_with_lock.ps1   BAT共通の排他実行・ログ世代管理
+scripts/backup_database.py  SQLiteオンラインバックアップ・復元検証
+scripts/backup_retention.py 検証済み週次バックアップだけの世代管理
+scripts/run_database_backup.ps1 バックアップ・復元検証・世代管理の週次実行
 tests/                      ユニットテスト
 tests/integration/          明示実行する外部APIテスト
 ```
@@ -128,6 +131,28 @@ python scripts\backup_database.py `
 復元訓練用DBは照合後に削除し、バックアップと検証JSONは保持します。既存の出力は上書きせず、
 古いバックアップも自動削除しません。本番DBへの復元は、定期処理を停止し、対象と退避先を
 別途確認した明示的な作業として扱ってください。
+
+### 検証済みバックアップの週次世代管理
+
+週次ランナーは共有パイプラインロックを取得してからオンラインバックアップと一時復元を行い、
+両方が成功した場合だけ世代管理を適用します。
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run_database_backup.ps1
+```
+
+自動管理対象は`stock_data-YYYYMMDD-HHMMSS.db`と同名の
+`.verification.json`がそろい、検証・一時復元・一時DB削除を確認できる組だけです。
+最新8世代、最低1世代を保持し、バックアップディレクトリ全体を20GiB以内にします。
+手動バックアップ、不完全な組、不正な検証JSON、無関係なファイルは削除しません。上限を
+満たせない場合は終了コード2で失敗を通知します。削除を伴わない確認は次のコマンドです。
+
+```powershell
+python scripts\backup_retention.py --directory $backupRoot
+```
+
+管理者PowerShellから`scripts\configure_database_backup_task.ps1`を実行すると、土曜9:00の
+`NISA-JQuant Database Backup`を登録します。設定処理はバックアップ本体を開始しません。
 
 ## 過去期間のJ-Quants株価収集
 
