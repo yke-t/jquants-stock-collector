@@ -177,6 +177,18 @@ does not implement retention deletion and never replaces `stock_data.db`.
 Restoring over the production path remains a separate, explicitly approved
 operation that requires stopped workflows and another verified checkpoint.
 
+The P7e live drill passed on 2026-09-13 against the local `stock_data.db`.
+The retained backup is
+`Documents\Codex Backups\jquants-stock-collector\database\stock_data-20260913-p7e.db`,
+with the verification record beside it as
+`stock_data-20260913-p7e.verification.json`. The source, backup, and temporary
+restore were each 1,472,598,016 bytes; all returned `quick_check=ok`, the same
+schema SHA-256 (`cf65c95e0b0e7bf76179b456f0ad72c5c3795483083c5d475077a6db916ab43f`),
+and identical row counts: 36,211 `dividend_financials`, 4,424 `fundamentals`,
+10,315,292 `prices`, 1,981 `signals`, and 4,425 `sync_progress`. The temporary
+restore directory was removed after verification. The retained backup and JSON
+were not written into the repository, and the source database was not modified.
+
 ## Operational blockers
 
 - Dividend scans and backtests now multiply per-share financial values by
