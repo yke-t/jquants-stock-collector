@@ -58,10 +58,9 @@ confirmed that regeneration makes the prior key unavailable, and the new
 the ignored repository `.env` without a plaintext backup. Read-only live
 checks returned HTTP 200 from both `/v2/equities/master?code=86970` and the
 production client's `/v2/fins/summary?code=86970` path; the latter returned 12
-financial-summary rows. This proves the rotated credential and the dividend
-client authentication path, but the next complete 18:00 scheduled workflow
-must still be checked separately before making a fresh end-to-end operational
-claim.
+financial-summary rows. At rotation time, this proved the credential and client
+authentication path but did not yet prove the complete 18:00 workflow. The
+subsequent scheduled evidence below closes that operational check.
 
 Post-rotation scheduled evidence was checked on 2026-09-04. The dividend task
 completed on both 2026-08-28 and 2026-08-31 with the rotated key. Subsequent
@@ -122,7 +121,7 @@ The script configures these local tasks without starting any workflow:
 - `NISA-JQuant Dividend Daily`: Monday through Friday at 18:00.
 - `SnowMoney_Monthly_Eval`: retained without modification.
 
-The Codex app heartbeat `J-Quants 日次監査・P6iチェック` runs Monday through
+The Codex app heartbeat `J-Quants 日次監査・前向き評価` runs Monday through
 Friday at 20:00 local time, after both daily workflows. It executes only
 `python scripts\audit_scheduled_operations.py` and stays silent when the task
 results, terminal log markers, database freshness, generated artifacts, and
@@ -188,6 +187,16 @@ and identical row counts: 36,211 `dividend_financials`, 4,424 `fundamentals`,
 10,315,292 `prices`, 1,981 `signals`, and 4,425 `sync_progress`. The temporary
 restore directory was removed after verification. The retained backup and JSON
 were not written into the repository, and the source database was not modified.
+
+## Migration acceptance
+
+The final P7f acceptance audit passed on 2026-09-13. The repository and CI,
+Windows scheduled actions, Codex monitoring, secret and generated-file
+boundaries, Antigravity dependency removal, and the P7e recovery evidence were
+checked together. The frozen P6j-P6m observations remain future evaluation
+milestones rather than migration blockers. See
+[`P7F_CODEX_MIGRATION_ACCEPTANCE.md`](P7F_CODEX_MIGRATION_ACCEPTANCE.md) for the
+evidence and remaining operating conditions.
 
 ## Operational blockers
 
