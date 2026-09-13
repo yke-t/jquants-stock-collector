@@ -36,6 +36,7 @@ DEFAULT_MINIMUM_ROWS = 3000
 DEFAULT_MINIMUM_TARGET_ROWS = 1000
 DEFAULT_MAX_MASTER_AGE_DAYS = 120
 DEFAULT_MIN_PROJECTED_PRICE_COVERAGE = 0.95
+PRICE_DATE_LOOKBACK_DAYS = 31
 IDENTIFIER_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 STAGING_TABLE = "fundamentals_refresh_p8"
 RETIRED_TABLE = "fundamentals_retired_p8"
@@ -183,15 +184,51 @@ def projected_price_coverage(
     incoming_rows: list[dict[str, Any]],
     minimum_coverage: float = DEFAULT_MIN_PROJECTED_PRICE_COVERAGE,
 ) -> dict[str, Any]:
-    latest_date = connection.execute("SELECT MAX(date) FROM prices").fetchone()[0]
+    target_codes = {
+        row["code"] for row in incoming_rows if row["scalecat"] in TARGET_SCALECATS
+    }
+    recent_rows = connection.execute(
+        f"""
+        SELECT date, code
+        FROM prices
+        WHERE date >= date(
+            (SELECT MAX(date) FROM prices),
+            '-{PRICE_DATE_LOOKBACK_DAYS} days'
+        )
+        ORDER BY date DESC
+        """
+    ).fetchall()
+    codes_by_date: dict[str, set[str]] = {}
+    for row in recent_rows:
+        price_date = str(row[0])
+        code = str(row[1])
+        if code in target_codes:
+            codes_by_date.setdefault(price_date, set()).add(code)
+    coverage_by_date = [
+        {"date": price_date, "covered_codes": len(codes)}
+        for price_date, codes in sorted(codes_by_date.items(), reverse=True)
+    ]
+    eligible_dates = [
+        item
+        for item in coverage_by_date
+        if target_codes
+        and item["covered_codes"] / len(target_codes) >= minimum_coverage
+    ]
+    if eligible_dates:
+        representative = eligible_dates[0]
+    elif coverage_by_date:
+        representative = max(
+            coverage_by_date,
+            key=lambda item: (item["covered_codes"], item["date"]),
+        )
+    else:
+        representative = {"date": None, "covered_codes": 0}
+    latest_date = representative["date"]
     latest_codes = {
         str(row[0])
         for row in connection.execute(
             "SELECT code FROM prices WHERE date = ?", (latest_date,)
         )
-    }
-    target_codes = {
-        row["code"] for row in incoming_rows if row["scalecat"] in TARGET_SCALECATS
     }
     covered_codes = target_codes & latest_codes
     missing_codes = sorted(target_codes - latest_codes)
@@ -202,6 +239,15 @@ def projected_price_coverage(
     )
     return {
         "latest_price_date": latest_date,
+        "representative_price_date": latest_date,
+        "observed_latest_price_date": (
+            coverage_by_date[0]["date"] if coverage_by_date else None
+        ),
+        "newer_partial_date_count": sum(
+            item["date"] > latest_date
+            for item in coverage_by_date
+            if latest_date is not None
+        ),
         "target_codes": len(target_codes),
         "covered_codes": len(covered_codes),
         "missing_code_count": len(missing_codes),
@@ -211,6 +257,7 @@ def projected_price_coverage(
         "meets_minimum": bool(
             coverage_pct is not None and coverage_pct >= minimum_coverage * 100
         ),
+        "recent_coverage_by_date": coverage_by_date,
     }
 
 

@@ -226,6 +226,15 @@ then checked with `PRAGMA quick_check` and row/date assertions. See
 [`DATA_COVERAGE.md`](DATA_COVERAGE.md) for thresholds and the 2026-09-14
 baseline.
 
+The guarded live refresh passed on 2026-09-14 after a new verified backup and
+restore drill. The master now has 4,443 unique codes dated 2026-06-22. After
+targeted dividend and price catch-up, the complete representative price date
+has 1,535 of 1,540 strategy codes (99.6753%), and all master codes without a
+financial row have a recorded collection attempt. The five remaining price
+gaps match JPX-published delistings retained by the delayed Free-plan master.
+The newer partial date is reported separately so a one-code or targeted update
+cannot falsely become the coverage denominator.
+
 ## Migration acceptance
 
 The final P7f acceptance audit passed on 2026-09-13. The repository and CI,

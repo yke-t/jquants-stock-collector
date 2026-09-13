@@ -127,6 +127,24 @@ class DataCoverageAuditTests(unittest.TestCase):
         self.assertEqual(prices["missing_code_count"], 1)
         self.assertEqual(prices["missing_codes"][0]["code"], "30000")
 
+    def test_newer_partial_date_does_not_replace_representative_date(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database = Path(temp_dir) / "data.db"
+            self.create_database(database)
+            with closing(sqlite3.connect(database)) as connection:
+                connection.execute(
+                    "INSERT INTO prices VALUES ('2026-09-11', '10000', 100)"
+                )
+                connection.commit()
+            audit = coverage.build_audit(database, date(2026, 9, 14))
+
+        prices = audit["daily_prices"]
+        self.assertEqual(prices["status"], "pass")
+        self.assertEqual(prices["representative_date"], "2026-09-10")
+        self.assertEqual(prices["observed_latest_date"], "2026-09-11")
+        self.assertEqual(prices["newer_partial_date_count"], 1)
+        self.assertEqual(prices["coverage_pct"], 100.0)
+
     def test_unattempted_missing_financial_code_fails(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             database = Path(temp_dir) / "data.db"

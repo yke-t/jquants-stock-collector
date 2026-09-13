@@ -227,6 +227,29 @@ class RefreshListedInfoTests(unittest.TestCase):
                     minimum_target_rows=3,
                 )
 
+    def test_projection_uses_latest_representative_price_date(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database = Path(temp_dir) / "data.db"
+            self.create_database(database)
+            with closing(sqlite3.connect(database)) as connection:
+                connection.execute(
+                    "INSERT INTO prices VALUES ('2026-09-11', '10000', 101)"
+                )
+                connection.commit()
+                _, incoming_rows = refresh.normalize_rows(
+                    refresh.response_rows(self.response())
+                )
+                projection = refresh.projected_price_coverage(
+                    connection,
+                    incoming_rows,
+                    minimum_coverage=0.95,
+                )
+
+        self.assertEqual(projection["representative_price_date"], "2026-09-10")
+        self.assertEqual(projection["observed_latest_price_date"], "2026-09-11")
+        self.assertEqual(projection["newer_partial_date_count"], 1)
+        self.assertTrue(projection["meets_minimum"])
+
 
 if __name__ == "__main__":
     unittest.main()

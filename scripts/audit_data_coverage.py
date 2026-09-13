@@ -27,6 +27,7 @@ DEFAULT_MIN_TARGET_PRICE_COVERAGE = 0.95
 DEFAULT_EXPECTED_DISCLOSURE_DELAY_DAYS = 84
 DEFAULT_DISCLOSURE_DELAY_GRACE_DAYS = 21
 DEFAULT_MAX_DIVIDEND_UPDATE_AGE_DAYS = 7
+PRICE_DATE_LOOKBACK_DAYS = 31
 
 
 def connect_read_only(database: Path) -> sqlite3.Connection:
@@ -135,8 +136,6 @@ def audit_daily_price_coverage(
     min_coverage: float = DEFAULT_MIN_TARGET_PRICE_COVERAGE,
     max_age_days: int = DEFAULT_MAX_PRICE_AGE_DAYS,
 ) -> dict[str, Any]:
-    latest_date = connection.execute("SELECT MAX(date) FROM prices").fetchone()[0]
-    latest_age_days = date_age_days(latest_date, as_of)
     placeholders = _placeholders(target_scalecats)
     target_codes = int(
         connection.execute(
@@ -145,38 +144,59 @@ def audit_daily_price_coverage(
             target_scalecats,
         ).fetchone()[0]
     )
-    covered_codes = int(
-        connection.execute(
+    coverage_by_date = [
+        {"date": str(row[0]), "covered_codes": int(row[1])}
+        for row in connection.execute(
             f"""
-            SELECT COUNT(*)
-            FROM fundamentals f
+            SELECT p.date, COUNT(DISTINCT p.code) AS covered_codes
+            FROM prices p
+            JOIN fundamentals f ON f.code = p.code
             WHERE f.scalecat IN ({placeholders})
-              AND EXISTS (
-                  SELECT 1 FROM prices p
-                  WHERE p.code = f.code AND p.date = ?
+              AND p.date >= date(
+                  (SELECT MAX(date) FROM prices),
+                  '-{PRICE_DATE_LOOKBACK_DAYS} days'
               )
+            GROUP BY p.date
+            ORDER BY p.date DESC
             """,
-            (*target_scalecats, latest_date),
-        ).fetchone()[0]
-    )
+            target_scalecats,
+        )
+    ]
+    observed_latest = coverage_by_date[0] if coverage_by_date else None
+    eligible_dates = [
+        item
+        for item in coverage_by_date
+        if target_codes
+        and item["covered_codes"] / target_codes >= min_coverage
+    ]
+    if eligible_dates:
+        representative = eligible_dates[0]
+    elif coverage_by_date:
+        representative = max(
+            coverage_by_date,
+            key=lambda item: (item["covered_codes"], item["date"]),
+        )
+    else:
+        representative = {"date": None, "covered_codes": 0}
+
+    latest_date = representative["date"]
+    covered_codes = representative["covered_codes"]
+    latest_age_days = date_age_days(latest_date, as_of)
     missing_rows = connection.execute(
         f"""
-        SELECT f.code, f.scalecat
+        SELECT f.code, f.scalecat, MAX(p.date) AS last_price_date
         FROM fundamentals f
+        LEFT JOIN prices p ON p.code = f.code
         WHERE f.scalecat IN ({placeholders})
-          AND NOT EXISTS (
-              SELECT 1 FROM prices p
-              WHERE p.code = f.code AND p.date = ?
-          )
+        GROUP BY f.code, f.scalecat
+        HAVING MAX(CASE WHEN p.date = ? THEN 1 ELSE 0 END) = 0
         ORDER BY f.code
         """,
         (*target_scalecats, latest_date),
     ).fetchall()
     missing_codes: list[dict[str, Any]] = []
     for row in missing_rows:
-        last_price_date = connection.execute(
-            "SELECT MAX(date) FROM prices WHERE code = ?", (row["code"],)
-        ).fetchone()[0]
+        last_price_date = row["last_price_date"]
         missing_codes.append(
             {
                 "code": row["code"],
@@ -213,6 +233,22 @@ def audit_daily_price_coverage(
         "issues": issues,
         "target_scalecats": list(target_scalecats),
         "latest_date": latest_date,
+        "representative_date": latest_date,
+        "observed_latest_date": (
+            observed_latest["date"] if observed_latest else None
+        ),
+        "observed_latest_covered_codes": (
+            observed_latest["covered_codes"] if observed_latest else 0
+        ),
+        "observed_latest_coverage_pct": percentage(
+            observed_latest["covered_codes"] if observed_latest else 0,
+            target_codes,
+        ),
+        "newer_partial_date_count": sum(
+            item["date"] > latest_date
+            for item in coverage_by_date
+            if latest_date is not None
+        ),
         "latest_age_days": latest_age_days,
         "max_age_days": max_age_days,
         "target_codes": target_codes,
@@ -221,6 +257,7 @@ def audit_daily_price_coverage(
         "coverage_pct": coverage_pct,
         "minimum_coverage_pct": min_coverage * 100,
         "missing_codes": missing_codes,
+        "recent_coverage_by_date": coverage_by_date,
     }
 
 
