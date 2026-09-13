@@ -1,5 +1,4 @@
 #Requires -Version 5.1
-#Requires -RunAsAdministrator
 
 [CmdletBinding()]
 param(
@@ -90,7 +89,7 @@ try {
     $principal = New-ScheduledTaskPrincipal `
         -UserId $userId `
         -LogonType Interactive `
-        -RunLevel Highest
+        -RunLevel Limited
     $definition = New-ScheduledTask `
         -Action $action `
         -Trigger $trigger `

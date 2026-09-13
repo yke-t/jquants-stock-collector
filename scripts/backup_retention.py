@@ -50,8 +50,10 @@ def load_verified_pair(database_path: Path) -> dict[str, Any]:
     except (OSError, json.JSONDecodeError) as error:
         raise ValueError(f"verification JSON is unreadable: {error}") from error
 
+    source = payload.get("source")
     backup = payload.get("backup")
     restore = payload.get("restore_drill")
+    restore_summary = restore.get("summary") if isinstance(restore, dict) else None
     required = {
         "backup_verified": payload.get("backup_verified") is True,
         "source_database_modified": (
@@ -60,8 +62,10 @@ def load_verified_pair(database_path: Path) -> dict[str, Any]:
         "existing_backup_overwritten": (
             payload.get("existing_backup_overwritten") is False
         ),
+        "source_summary": isinstance(source, dict),
         "backup_summary": isinstance(backup, dict),
         "restore_summary": isinstance(restore, dict),
+        "restored_database_summary": isinstance(restore_summary, dict),
     }
     if isinstance(backup, dict):
         try:
@@ -93,6 +97,25 @@ def load_verified_pair(database_path: Path) -> dict[str, Any]:
                     restore.get("temporary_database_removed") is True
                 ),
             }
+        )
+    if (
+        isinstance(source, dict)
+        and isinstance(backup, dict)
+        and isinstance(restore_summary, dict)
+    ):
+        for field in (
+            "quick_check",
+            "schema_sha256",
+            "table_row_counts",
+            "application_id",
+            "user_version",
+        ):
+            required[f"source_backup_{field}"] = source.get(field) == backup.get(field)
+            required[f"backup_restore_{field}"] = (
+                backup.get(field) == restore_summary.get(field)
+            )
+        required["restore_size"] = (
+            restore_summary.get("size_bytes") == database_path.stat().st_size
         )
     failed = [name for name, passed in required.items() if not passed]
     if failed:

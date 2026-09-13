@@ -38,17 +38,34 @@ class BackupRetentionTests(unittest.TestCase):
             "backup_verified": valid,
             "source_database_modified": False,
             "existing_backup_overwritten": False,
+            "source": {
+                "quick_check": "ok",
+                "schema_sha256": "verified-schema",
+                "table_row_counts": {"prices": 2},
+                "application_id": 0,
+                "user_version": 0,
+            },
             "backup": {
                 "path": str(database.resolve()),
                 "size_bytes": database.stat().st_size,
                 "quick_check": "ok",
                 "schema_sha256": "verified-schema",
                 "table_row_counts": {"prices": 2},
+                "application_id": 0,
+                "user_version": 0,
             },
             "restore_drill": {
                 "performed": True,
                 "verified": True,
                 "temporary_database_removed": True,
+                "summary": {
+                    "size_bytes": database.stat().st_size,
+                    "quick_check": "ok",
+                    "schema_sha256": "verified-schema",
+                    "table_row_counts": {"prices": 2},
+                    "application_id": 0,
+                    "user_version": 0,
+                },
             },
         }
         result.write_text(json.dumps(payload), encoding="utf-8")
@@ -126,6 +143,25 @@ class BackupRetentionTests(unittest.TestCase):
             self.assertTrue(invalid[1].exists())
             self.assertTrue(valid[0].exists())
             self.assertEqual(plan["prune"], [])
+
+    def test_mismatched_source_and_backup_evidence_is_protected(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            directory = Path(temp_dir)
+            database, result = self.create_pair(directory, "20260101-090000")
+            payload = json.loads(result.read_text(encoding="utf-8"))
+            payload["source"]["table_row_counts"] = {"prices": 3}
+            result.write_text(json.dumps(payload), encoding="utf-8")
+
+            plan = backup_retention.plan_retention(
+                directory,
+                retain_count=1,
+                max_total_bytes=10_000,
+            )
+
+            self.assertEqual(plan["managed"], [])
+            self.assertTrue(database.exists())
+            self.assertTrue(result.exists())
+            self.assertIn("source_backup_table_row_counts", plan["protected"][0]["reason"])
 
     def test_size_limit_prunes_to_minimum_count(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -222,6 +258,9 @@ class BackupRunnerTests(unittest.TestCase):
                 encoding="utf-8-sig"
             )
             self.assertIn("[END] Verified backup and retention completed.", log_text)
+            all_output = completed.stdout + completed.stderr + log_text
+            self.assertNotIn("NativeCommandError", all_output)
+            self.assertNotIn("FullyQualifiedErrorId", all_output)
 
     def test_scheduler_configuration_is_weekly_and_does_not_run_workflow(self) -> None:
         script = (
@@ -231,6 +270,8 @@ class BackupRunnerTests(unittest.TestCase):
         self.assertIn("-DaysOfWeek Saturday", script)
         self.assertIn("-At 9am", script)
         self.assertIn("-StartWhenAvailable", script)
+        self.assertIn("-RunLevel Limited", script)
+        self.assertNotIn("#Requires -RunAsAdministrator", script)
         self.assertIn("WorkflowsExecuted = $false", script)
         self.assertIn("-RetentionCount 8", script)
         self.assertIn("-MaxTotalBytes 21474836480", script)

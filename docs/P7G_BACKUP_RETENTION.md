@@ -18,7 +18,7 @@
 - 競合防止: 日次・配当・月次処理と同じ
   `Global\JQuantsStockCollectorPipeline` mutex
 - 実行時間上限: 2時間
-- Windowsログオン方式: 対話ログオン。パスワードを保存しない
+- Windowsログオン方式: 対話ログオン・Limited。パスワードや管理者権限を使用しない
 
 現行DBが約1.47GBのため、手動P7eバックアップ1組と週次8世代を保持しても約13.3GBで、
 20GiB上限に余裕がある。DB増加時は世代数より容量上限を優先するが、最新1世代は削除せず、
@@ -58,6 +58,48 @@
 - P7eのDBと検証JSON: 管理命名規則外として保護
 - 実ディレクトリ容量: 1,472,599,984 bytes、20GiB上限内
 
-週次Task Scheduler登録と週次ランナーの実DB実行は、コードの全検証とGitチェックポイント後に
-行う。設定処理自体はバックアップワークフローを開始しない。
+実装は151テストPASS後に`2e9f943`としてコミットし、`origin/main`へpushしてから実機へ
+適用した。
 
+## 2026-09-14 P7h実DB・Task Scheduler検証
+
+週次ランナーを実DBに対して直接1回実行し、終了コード0を確認した。
+
+| 項目 | 結果 |
+|---|---|
+| バックアップ | `stock_data-20260914-000034.db` |
+| 検証JSON | `stock_data-20260914-000034.verification.json` |
+| DBサイズ | 1,472,598,016 bytes |
+| `quick_check` | 元DB・バックアップ・一時復元DBがすべて`ok` |
+| スキーマSHA-256 | 3DBで一致 |
+| 全ユーザーテーブル件数 | 3DBで一致 |
+| 一時復元DB | 検証後に削除、ディレクトリも不存在 |
+| 元DB | 更新なし。最終更新日時は2026-09-11 18:09:23のまま |
+| 管理世代 | 1 |
+| 削除候補・削除実績 | 0・0 |
+| 保護対象 | P7e手動DB、P7e検証JSON、運用ログの3件 |
+| ディレクトリ総量 | 2,945,209,782 bytes、20GiB上限内 |
+
+`NISA-JQuant Database Backup`を現在ユーザーの`Interactive`・`Limited` principalで
+登録した。パスワードと管理者権限は使用しない。状態は`Ready`、土曜9:00、
+`StartWhenAvailable=true`、`MultipleInstances=IgnoreNew`、2時間上限、次回は
+2026-09-19 09:00、未実行回数0である。登録処理中のワークフロー実行はない。
+
+登録直後の`LastTaskResult=0x41303`は
+[MicrosoftのTask Scheduler定数](https://learn.microsoft.com/ja-jp/windows/win32/taskschd/task-scheduler-error-and-success-constants)
+で「まだ実行されていない」状態であり、初回予定後の成功を示す値ではない。P7jとして
+最初のTask Scheduler経由実行を別途確認する。
+
+## P7i監視統合
+
+`scripts/audit_scheduled_operations.py`は、日次・配当監査に加えて週次バックアップを
+読み取り専用で検査する。タスク結果、未実行回数、検証済み管理世代、7日以内の鮮度、
+最新タスク実行との対応、保持容量を確認する。初回予定前は実DB検証バックアップが新鮮な
+場合だけ`not_due`を許容し、それ以外の不一致は全体監査を`fail`にする。
+
+2026-09-14 00:07の実機監査は、2026-09-11の日次・配当・DB・成果物がすべて`pass`、
+週次バックアップが`not_due`、全体が`pass`だった。平日20:00のCodex監視も
+`database_backup`の異常通知とP7jの一度だけの証跡化に対応済みである。
+
+最終ゲートは156テスト、`pip check`、実DB検査、既知の株式数基準ケース`19610`と
+`20030`、PowerShell構文がすべてPASSした。

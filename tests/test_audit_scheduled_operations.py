@@ -3,8 +3,9 @@ import importlib.util
 import json
 import tempfile
 import unittest
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -113,6 +114,91 @@ class ScheduledOperationAuditTest(unittest.TestCase):
         )
 
         self.assertIn("アクセスは拒否されました", rendered)
+
+    def backup_plan(self, newest: datetime, *, limit_satisfied: bool = True):
+        database_path = Path("C:/backup") / f"stock_data-{newest:%Y%m%d-%H%M%S}.db"
+        result_path = database_path.with_name(
+            f"{database_path.stem}.verification.json"
+        )
+        item = {
+            "stamp": newest.replace(tzinfo=None),
+            "database_path": database_path,
+            "result_path": result_path,
+            "size_bytes": 100,
+        }
+        return {
+            "directory": Path("C:/backup"),
+            "retain_count": 8,
+            "minimum_count": 1,
+            "max_total_bytes": 20 * 1024**3,
+            "directory_total_bytes": 100,
+            "projected_total_bytes": 100,
+            "limit_satisfied": limit_satisfied,
+            "managed": [item],
+            "prune": [],
+            "protected": [],
+        }
+
+    def test_backup_audit_accepts_fresh_live_validation_before_first_run(self):
+        audited_at = datetime(2026, 9, 14, 20, tzinfo=timezone(timedelta(hours=9)))
+        task = {
+            "LastRunTime": "1999-11-30T00:00:00+09:00",
+            "LastTaskResult": audit.BACKUP_NOT_RUN_RESULT,
+            "NumberOfMissedRuns": 0,
+        }
+        with patch.object(
+            audit.backup_retention,
+            "plan_retention",
+            return_value=self.backup_plan(datetime(2026, 9, 14, 0, 0, 34)),
+        ):
+            result = audit.audit_database_backup(task, Path("C:/backup"), audited_at)
+
+        self.assertEqual(result["status"], "not_due")
+
+    def test_backup_audit_matches_successful_task_to_verified_pair(self):
+        zone = timezone(timedelta(hours=9))
+        audited_at = datetime(2026, 9, 19, 20, tzinfo=zone)
+        task = {
+            "LastRunTime": "2026-09-19T09:00:00+09:00",
+            "LastTaskResult": 0,
+            "NumberOfMissedRuns": 0,
+        }
+        with patch.object(
+            audit.backup_retention,
+            "plan_retention",
+            return_value=self.backup_plan(datetime(2026, 9, 19, 9, 0, 5)),
+        ):
+            result = audit.audit_database_backup(task, Path("C:/backup"), audited_at)
+
+        self.assertEqual(result["status"], "pass")
+
+    def test_backup_audit_fails_stale_not_run_task(self):
+        zone = timezone(timedelta(hours=9))
+        audited_at = datetime(2026, 9, 22, 20, tzinfo=zone)
+        task = {
+            "LastRunTime": "1999-11-30T00:00:00+09:00",
+            "LastTaskResult": audit.BACKUP_NOT_RUN_RESULT,
+            "NumberOfMissedRuns": 0,
+        }
+        with patch.object(
+            audit.backup_retention,
+            "plan_retention",
+            return_value=self.backup_plan(datetime(2026, 9, 14, 0, 0, 34)),
+        ):
+            result = audit.audit_database_backup(task, Path("C:/backup"), audited_at)
+
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("freshness", result["reason"])
+
+    def test_backup_failure_overrides_operational_pass(self):
+        self.assertEqual(
+            audit.combine_operational_and_backup_status("pass", "fail"),
+            "fail",
+        )
+        self.assertEqual(
+            audit.combine_operational_and_backup_status("pass", "not_due"),
+            "pass",
+        )
 
 
 if __name__ == "__main__":

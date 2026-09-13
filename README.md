@@ -151,8 +151,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run_database_backup.
 python scripts\backup_retention.py --directory $backupRoot
 ```
 
-管理者PowerShellから`scripts\configure_database_backup_task.ps1`を実行すると、土曜9:00の
+通常のPowerShellから`scripts\configure_database_backup_task.ps1`を実行すると、土曜9:00の
 `NISA-JQuant Database Backup`を登録します。設定処理はバックアップ本体を開始しません。
+
+平日20:00の読み取り専用監査は、この週次タスクの終了コード、未実行回数、最新検証済み
+バックアップ、7日以内の鮮度、世代数、容量上限も確認します。
 
 ## 過去期間のJ-Quants株価収集
 

@@ -1,4 +1,4 @@
-"""Read-only audit for the scheduled daily and dividend workflows on Windows."""
+"""Read-only audit for scheduled workflows and verified database backups."""
 
 from __future__ import annotations
 
@@ -7,13 +7,33 @@ import json
 import sqlite3
 import subprocess
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-TASK_NAMES = ("NISA-JQuant Daily", "NISA-JQuant Dividend Daily")
+SCRIPTS_ROOT = PROJECT_ROOT / "scripts"
+if str(SCRIPTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_ROOT))
+
+import backup_retention
+
+
+BACKUP_TASK_NAME = "NISA-JQuant Database Backup"
+BACKUP_NOT_RUN_RESULT = 0x41303
+DEFAULT_BACKUP_DIRECTORY = (
+    Path.home()
+    / "Documents"
+    / "Codex Backups"
+    / "jquants-stock-collector"
+    / "database"
+)
+TASK_NAMES = (
+    "NISA-JQuant Daily",
+    "NISA-JQuant Dividend Daily",
+    BACKUP_TASK_NAME,
+)
 WORKFLOWS = {
     "daily": {
         "task_name": "NISA-JQuant Daily",
@@ -33,9 +53,13 @@ WORKFLOWS = {
 
 
 def query_scheduled_tasks() -> dict[str, dict[str, Any]]:
-    """Return the two task states without starting either task."""
+    """Return workflow and backup task states without starting them."""
     powershell = r"""
-$names = @('NISA-JQuant Daily', 'NISA-JQuant Dividend Daily')
+$names = @(
+    'NISA-JQuant Daily',
+    'NISA-JQuant Dividend Daily',
+    'NISA-JQuant Database Backup'
+)
 $rows = foreach ($name in $names) {
     $task = Get-ScheduledTask -TaskName $name -ErrorAction Stop
     $info = Get-ScheduledTaskInfo -TaskName $name -ErrorAction Stop
@@ -209,7 +233,145 @@ def operational_status(workflow_statuses: list[str], evidence_statuses: list[str
     return "fail"
 
 
-def build_audit(repository_root: Path, target_date: date) -> dict[str, Any]:
+def audit_database_backup(
+    task: dict[str, Any],
+    backup_directory: Path,
+    audited_at: datetime,
+    max_age: timedelta = timedelta(days=7),
+) -> dict[str, Any]:
+    try:
+        plan = backup_retention.plan_retention(
+            backup_directory,
+            retain_count=backup_retention.DEFAULT_RETAIN_COUNT,
+            minimum_count=backup_retention.DEFAULT_MINIMUM_COUNT,
+            max_total_bytes=backup_retention.DEFAULT_MAX_TOTAL_BYTES,
+        )
+    except Exception as error:
+        return {
+            "status": "fail",
+            "reason": f"backup inventory failed: {type(error).__name__}: {error}",
+            "task": task,
+            "directory": str(backup_directory),
+        }
+
+    managed = plan["managed"]
+    newest = managed[-1] if managed else None
+    evidence = (
+        {
+            "stamp": newest["stamp"].isoformat(),
+            "database_path": str(newest["database_path"]),
+            "result_path": str(newest["result_path"]),
+            "size_bytes": newest["size_bytes"],
+        }
+        if newest
+        else None
+    )
+    base = {
+        "task": task,
+        "directory": str(plan["directory"]),
+        "policy": {
+            "retain_count": plan["retain_count"],
+            "minimum_count": plan["minimum_count"],
+            "max_total_bytes": plan["max_total_bytes"],
+            "max_age_seconds": int(max_age.total_seconds()),
+        },
+        "directory_total_bytes": plan["directory_total_bytes"],
+        "projected_total_bytes": plan["projected_total_bytes"],
+        "limit_satisfied": plan["limit_satisfied"],
+        "managed_count": len(managed),
+        "prune_count": len(plan["prune"]),
+        "protected_count": len(plan["protected"]),
+        "newest": evidence,
+    }
+    if int(task.get("NumberOfMissedRuns", 0)) > 0:
+        return {
+            "status": "fail",
+            "reason": "backup task has missed runs",
+            **base,
+        }
+    if not plan["limit_satisfied"]:
+        return {
+            "status": "fail",
+            "reason": "backup directory exceeds the retention limit",
+            **base,
+        }
+    if newest is None:
+        return {
+            "status": "fail",
+            "reason": "no verified managed backup is available",
+            **base,
+        }
+
+    newest_time = newest["stamp"].replace(tzinfo=audited_at.tzinfo)
+    age = audited_at - newest_time
+    base["newest_age_seconds"] = int(age.total_seconds())
+    if age < timedelta(0) or age > max_age:
+        return {
+            "status": "fail",
+            "reason": "newest verified backup is outside the freshness window",
+            **base,
+        }
+
+    last_result = int(task.get("LastTaskResult", -1))
+    if last_result == BACKUP_NOT_RUN_RESULT:
+        return {
+            "status": "not_due",
+            "reason": "task has not run yet; fresh live-validation backup exists",
+            **base,
+        }
+    if last_result != 0:
+        return {
+            "status": "fail",
+            "reason": f"backup task returned {last_result}",
+            **base,
+        }
+
+    try:
+        last_run = datetime.fromisoformat(str(task.get("LastRunTime", "")))
+    except ValueError:
+        return {
+            "status": "fail",
+            "reason": "invalid backup task LastRunTime",
+            **base,
+        }
+    if last_run.tzinfo is None:
+        last_run = last_run.replace(tzinfo=audited_at.tzinfo)
+    newest_for_run = newest["stamp"].replace(tzinfo=last_run.tzinfo)
+    if not (
+        last_run - timedelta(minutes=5)
+        <= newest_for_run
+        <= last_run + timedelta(hours=2)
+    ):
+        return {
+            "status": "fail",
+            "reason": "newest verified backup does not match the latest task run",
+            **base,
+        }
+    return {
+        "status": "pass",
+        "reason": "task returned 0 and a matching verified backup is fresh",
+        **base,
+    }
+
+
+def combine_operational_and_backup_status(
+    operation_status: str,
+    backup_status: str,
+) -> str:
+    if operation_status == "fail" or backup_status == "fail":
+        return "fail"
+    if operation_status == "pending":
+        return "pending"
+    if backup_status in ("pass", "not_due"):
+        return "pass"
+    return "pending"
+
+
+def build_audit(
+    repository_root: Path,
+    target_date: date,
+    backup_directory: Path = DEFAULT_BACKUP_DIRECTORY,
+) -> dict[str, Any]:
     tasks = query_scheduled_tasks()
     workflows: dict[str, Any] = {}
     for name, configuration in WORKFLOWS.items():
@@ -243,14 +405,25 @@ def build_audit(repository_root: Path, target_date: date) -> dict[str, Any]:
     evidence_statuses = [database["status"]] + [
         artifact["status"] for artifact in artifacts.values()
     ]
+    operation_status = operational_status(workflow_statuses, evidence_statuses)
+    audited_at = datetime.now().astimezone()
+    backup = audit_database_backup(
+        tasks[BACKUP_TASK_NAME],
+        backup_directory,
+        audited_at,
+    )
     return {
         "schema_version": "1.0",
-        "audited_at": datetime.now().astimezone().isoformat(),
+        "audited_at": audited_at.isoformat(),
         "target_date": target_date.isoformat(),
-        "overall_status": operational_status(workflow_statuses, evidence_statuses),
+        "overall_status": combine_operational_and_backup_status(
+            operation_status,
+            backup["status"],
+        ),
         "workflows": workflows,
         "database": database,
         "artifacts": artifacts,
+        "database_backup": backup,
     }
 
 
@@ -270,6 +443,12 @@ def parse_args() -> argparse.Namespace:
         default=PROJECT_ROOT,
         help="Repository root containing logs, reports, and stock_data.db",
     )
+    parser.add_argument(
+        "--backup-directory",
+        type=Path,
+        default=DEFAULT_BACKUP_DIRECTORY,
+        help="Directory containing verified managed database backups",
+    )
     return parser.parse_args()
 
 
@@ -287,7 +466,11 @@ def format_json_for_stdout(payload: Any, encoding: str | None = None) -> str:
 def main() -> int:
     args = parse_args()
     try:
-        audit = build_audit(args.repository_root.resolve(), args.date)
+        audit = build_audit(
+            args.repository_root.resolve(),
+            args.date,
+            args.backup_directory.resolve(),
+        )
     except Exception as error:
         print(
             format_json_for_stdout(

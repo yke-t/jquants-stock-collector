@@ -196,6 +196,18 @@ eligible for pruning. Manual backups, invalid or incomplete pairs, symlinks,
 and unrelated files are protected. See
 [`P7G_BACKUP_RETENTION.md`](P7G_BACKUP_RETENTION.md) for the policy and evidence.
 
+P7h installed `NISA-JQuant Database Backup` as a least-privileged interactive
+task on 2026-09-14. It runs Saturdays at 09:00 with start-when-available,
+`IgnoreNew`, and a two-hour limit. A direct live run of the exact runner created
+and restored a 1,472,598,016-byte database, matched all integrity evidence,
+kept the source unchanged, and pruned nothing. The first scheduler-triggered
+run is due on 2026-09-19 and remains a separate P7j observation.
+
+The weekday Codex heartbeat now audits the backup task, newest verified pair,
+seven-day freshness, task/run correspondence, missed runs, and the capacity
+limit. Backup failures block forward evaluation and are reported without
+automatic repair, deletion, or rerun.
+
 ## Migration acceptance
 
 The final P7f acceptance audit passed on 2026-09-13. The repository and CI,

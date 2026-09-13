@@ -121,6 +121,14 @@ try {
     try {
         $ErrorActionPreference = "Continue"
         & $pythonPath @backupArguments 2>&1 |
+            ForEach-Object {
+                if ($_ -is [Management.Automation.ErrorRecord]) {
+                    $_.Exception.Message
+                }
+                else {
+                    [string]$_
+                }
+            } |
             Tee-Object -FilePath $logPath -Append
         $backupExitCode = $LASTEXITCODE
     }
@@ -143,6 +151,14 @@ try {
     try {
         $ErrorActionPreference = "Continue"
         & $pythonPath @retentionArguments 2>&1 |
+            ForEach-Object {
+                if ($_ -is [Management.Automation.ErrorRecord]) {
+                    $_.Exception.Message
+                }
+                else {
+                    [string]$_
+                }
+            } |
             Tee-Object -FilePath $logPath -Append
         $retentionExitCode = $LASTEXITCODE
     }
