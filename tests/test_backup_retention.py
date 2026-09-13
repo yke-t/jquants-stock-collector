@@ -86,11 +86,11 @@ class BackupRetentionTests(unittest.TestCase):
 
             self.assertEqual(
                 [item["database_path"] for item in plan["prune"]],
-                [oldest[0]],
+                [oldest[0].resolve()],
             )
             self.assertEqual(
                 [item["database_path"] for item in plan["keep"]],
-                [middle[0], newest[0]],
+                [middle[0].resolve(), newest[0].resolve()],
             )
             self.assertTrue(all(path.exists() for path in (*oldest, *middle, *newest)))
 
@@ -109,9 +109,10 @@ class BackupRetentionTests(unittest.TestCase):
                 retain_count=1,
                 max_total_bytes=10_000,
             )
+            expected_deleted = {str(path.resolve()) for path in oldest}
             deleted = backup_retention.apply_retention(plan)
 
-            self.assertEqual(set(deleted), {str(oldest[0]), str(oldest[1])})
+            self.assertEqual(set(deleted), expected_deleted)
             self.assertFalse(oldest[0].exists())
             self.assertFalse(oldest[1].exists())
             self.assertTrue(newest[0].exists())
@@ -119,8 +120,8 @@ class BackupRetentionTests(unittest.TestCase):
             self.assertTrue(manual_database.exists())
             self.assertTrue(manual_result.exists())
             protected_paths = {item["path"] for item in plan["protected"]}
-            self.assertIn(str(manual_database), protected_paths)
-            self.assertIn(str(manual_result), protected_paths)
+            self.assertIn(str(manual_database.resolve()), protected_paths)
+            self.assertIn(str(manual_result.resolve()), protected_paths)
 
     def test_invalid_verification_record_is_protected(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -181,7 +182,7 @@ class BackupRetentionTests(unittest.TestCase):
             )
 
             self.assertEqual(len(plan["keep"]), 1)
-            self.assertEqual(plan["keep"][0]["database_path"], newest[0])
+            self.assertEqual(plan["keep"][0]["database_path"], newest[0].resolve())
             self.assertTrue(plan["limit_satisfied"])
 
     def test_protected_file_can_make_limit_unsatisfied(self) -> None:
