@@ -10,7 +10,8 @@ python -m src.backtest_wfa --start 2016-01-01 --splits 5
 ```
 
 主な引数は`--end`、`--initial-capital`、`--max-positions`、`--lot-size`、
-`--commission-bps`、`--slippage-bps`です。結果を保存しない確認には`--no-save`を使います。
+`--commission-bps`、`--slippage-bps`、`--allocation-policy`、`--max-entry-weight`です。
+結果を保存しない確認には`--no-save`を使います。
 SQLiteはURIの`mode=ro`で開くため、この処理はDBを更新しません。
 
 ## 約定規則
@@ -89,6 +90,28 @@ P6fでは、購入不能候補を新規約定枠へ数えず、実際の新規�
 旧P6dのfoldパラメータを固定した比較でもCAGRは9.13%となり、候補走査だけの是正効果を確認しました。
 修正後に学習期間でパラメータを選び直した結果が11.44%です。詳細は
 [P6f再検証記録](P6F_CANDIDATE_TRAVERSAL.md)を参照してください。
+
+## P6g資金配分オプション
+
+既定の`fixed-equal-weight`は、新規取得目標額を`約定時純資産 ÷ 最大保有数`とします。
+検証用の`remaining-slots-capped`は、残り現金を開始時の空き枠へ均等配分しつつ、
+新規取得額を約定時純資産の`--max-entry-weight`以下へ制限します。候補順位、100株単元、
+現金非負、最大保有数は変更しません。
+
+```powershell
+python -m src.backtest_wfa `
+  --start 2024-01-01 `
+  --end 2026-09-02 `
+  --splits 3 `
+  --allocation-policy remaining-slots-capped `
+  --max-entry-weight 0.10
+```
+
+10%上限を結果確認前に固定した[P6g事前登録](P6G_PREREGISTRATION.md)に従う比較では、
+固定パラメータCAGRが11.44%から11.90%、fold平均現金比率の単純平均が27.74%から14.09%へ
+変化し、採用条件を通過しました。一方で最大ドローダウンは-12.29%から-18.02%へ悪化しました。
+完全WFAのCAGRは11.46%で15%目標に届かず、改善も小さいため、既定値は
+`fixed-equal-weight`のまま維持します。詳細は[P6g評価結果](P6G_ALLOCATION_RESULT.md)を参照してください。
 
 ## 出力
 

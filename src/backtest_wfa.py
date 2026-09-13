@@ -28,6 +28,10 @@ DEFAULT_START_DATE = "2016-01-01"
 DEFAULT_LOOKBACK_DAYS = 400
 TARGET_CAGR = 0.15
 TARGET_MAX_DRAWDOWN = -0.20
+ALLOCATION_POLICIES = (
+    "fixed-equal-weight",
+    "remaining-slots-capped",
+)
 DEFAULT_SCALE_CATEGORIES = (
     "TOPIX Small 1",
     "TOPIX Small 2",
@@ -60,6 +64,8 @@ class ExecutionConfig:
     lot_size: int = 100
     commission_bps: float = 10.0
     slippage_bps: float = 5.0
+    allocation_policy: str = "fixed-equal-weight"
+    max_entry_weight: float = 0.10
 
     def validate(self) -> None:
         if self.initial_capital <= 0:
@@ -70,6 +76,12 @@ class ExecutionConfig:
             raise ValueError("lot_size must be positive")
         if self.commission_bps < 0 or self.slippage_bps < 0:
             raise ValueError("execution costs cannot be negative")
+        if self.allocation_policy not in ALLOCATION_POLICIES:
+            raise ValueError(
+                f"allocation_policy must be one of {ALLOCATION_POLICIES}"
+            )
+        if not 0 < self.max_entry_weight <= 1:
+            raise ValueError("max_entry_weight must be in (0, 1]")
 
 
 @dataclass
@@ -230,6 +242,23 @@ def _round_lot_quantity(
     per_share_cost = fill_price * (1.0 + commission_rate)
     lots = math.floor(budget / (per_share_cost * lot_size))
     return max(0, lots * lot_size)
+
+
+def _target_entry_value(
+    execution: ExecutionConfig,
+    *,
+    cash: float,
+    open_equity: float,
+    open_slots: int,
+) -> float:
+    if open_slots <= 0:
+        raise ValueError("open_slots must be positive")
+    if execution.allocation_policy == "remaining-slots-capped":
+        return min(
+            cash / open_slots,
+            open_equity * execution.max_entry_weight,
+        )
+    return open_equity / execution.max_positions
 
 
 class PortfolioSimulator:
@@ -401,7 +430,12 @@ class PortfolioSimulator:
                     )
                     for code, position in positions.items()
                 )
-                target_value = open_equity / self.execution.max_positions
+                target_value = _target_entry_value(
+                    self.execution,
+                    cash=cash,
+                    open_equity=open_equity,
+                    open_slots=slots,
+                )
                 entries_placed = 0
                 for code in candidates:
                     if entries_placed >= slots:
@@ -740,6 +774,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--lot-size", type=int, default=100)
     parser.add_argument("--commission-bps", type=float, default=10.0)
     parser.add_argument("--slippage-bps", type=float, default=5.0)
+    parser.add_argument(
+        "--allocation-policy",
+        choices=ALLOCATION_POLICIES,
+        default="fixed-equal-weight",
+    )
+    parser.add_argument("--max-entry-weight", type=float, default=0.10)
     parser.add_argument("--output-dir", type=Path, default=REPORTS_DIR / "wfa")
     parser.add_argument("--no-save", action="store_true")
     return parser.parse_args()
@@ -753,6 +793,8 @@ def main() -> int:
         lot_size=args.lot_size,
         commission_bps=args.commission_bps,
         slippage_bps=args.slippage_bps,
+        allocation_policy=args.allocation_policy,
+        max_entry_weight=args.max_entry_weight,
     )
     prices = load_price_history(
         args.db,

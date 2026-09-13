@@ -300,6 +300,70 @@ class BacktestWfaTest(unittest.TestCase):
         self.assertLessEqual(equity["positions"].max(), 1)
         self.assertTrue((equity["cash"] >= 0).all())
 
+    def test_remaining_slots_policy_redeploys_cash_with_entry_cap(self):
+        dates = pd.bdate_range("2026-01-05", periods=4)
+        codes = tuple(f"{number:05d}" for number in range(1, 21))
+        prices = prepared_rows(dates, codes=codes)
+        price_columns = [
+            "basis_open",
+            "basis_high",
+            "basis_low",
+            "basis_close",
+        ]
+        prices.loc[:, price_columns] = 1_000.0
+        prices.loc[:, "gc_trend"] = False
+        prices.loc[:, "ma_short"] = 900.0
+        prices.loc[:, "priority_score"] = 1.10
+
+        first_wave = (prices["date"] == dates[0]) & prices["code"].isin(codes[:19])
+        second_wave = (prices["date"] == dates[1]) & (prices["code"] == codes[19])
+        prices.loc[first_wave | second_wave, "gc_trend"] = True
+        prices.loc[first_wave | second_wave, "ma_short"] = 2_000.0
+        prices.loc[first_wave | second_wave, "priority_score"] = 0.50
+
+        common = {
+            "initial_capital": 3_000_000,
+            "max_positions": 20,
+            "lot_size": 100,
+            "commission_bps": 0,
+            "slippage_bps": 0,
+        }
+        fixed = ExecutionConfig(**common)
+        remaining = ExecutionConfig(
+            **common,
+            allocation_policy="remaining-slots-capped",
+            max_entry_weight=0.10,
+        )
+
+        fixed_equity, fixed_trades = PortfolioSimulator(prices, fixed).run(
+            self.params,
+            start_date=dates[0],
+            end_date=dates[-1],
+        )
+        remaining_equity, remaining_trades = PortfolioSimulator(
+            prices, remaining
+        ).run(
+            self.params,
+            start_date=dates[0],
+            end_date=dates[-1],
+        )
+
+        fixed_last_qty = fixed_trades.loc[
+            fixed_trades["code"] == codes[19], "qty"
+        ].iloc[0]
+        remaining_last_qty = remaining_trades.loc[
+            remaining_trades["code"] == codes[19], "qty"
+        ].iloc[0]
+        self.assertEqual(fixed_last_qty, 100)
+        self.assertEqual(remaining_last_qty, 300)
+        self.assertEqual(fixed_equity["positions"].max(), 20)
+        self.assertEqual(remaining_equity["positions"].max(), 20)
+        self.assertTrue((remaining_equity["cash"] >= 0).all())
+
+    def test_execution_rejects_unknown_allocation_policy(self):
+        with self.assertRaises(ValueError):
+            ExecutionConfig(allocation_policy="unknown").validate()
+
     def test_weekend_end_date_liquidates_on_last_available_session(self):
         dates = pd.bdate_range("2026-01-05", periods=3)
         prices = prepared_rows(dates, signal_date=dates[0])
