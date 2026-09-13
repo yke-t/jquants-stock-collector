@@ -110,6 +110,25 @@ tests/integration/          明示実行する外部APIテスト
 
 配当財務の日次同期は`--stale-days 7 --limit 500`で、未取得銘柄を先に、取得済み銘柄を最終更新が古い順にローテーション更新します。正常な空応答も取得試行として`sync_progress`へ記録するため、財務データのない銘柄で処理順が停滞しません。株式分割を含む実データ回帰確認は完了していますが、運用コードを変更した場合は、実行結果・DB更新・生成物を再確認してから運用可能と判断してください。
 
+### SQLiteバックアップと復元訓練
+
+本番DBを変更せず、SQLiteのオンラインバックアップを作成して復元可能性を検証できます。
+
+```powershell
+$backupRoot = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Codex Backups\jquants-stock-collector\database'
+python scripts\backup_database.py `
+  --source stock_data.db `
+  --output (Join-Path $backupRoot 'stock_data-YYYYMMDD.db') `
+  --result (Join-Path $backupRoot 'stock_data-YYYYMMDD.verification.json') `
+  --restore-drill
+```
+
+元DBは読み取り専用で開き、バックアップと一時復元DBについて`PRAGMA quick_check`、
+スキーマSHA-256、全ユーザーテーブルの行数、SQLiteのapplication/user versionを照合します。
+復元訓練用DBは照合後に削除し、バックアップと検証JSONは保持します。既存の出力は上書きせず、
+古いバックアップも自動削除しません。本番DBへの復元は、定期処理を停止し、対象と退避先を
+別途確認した明示的な作業として扱ってください。
+
 ## 過去期間のJ-Quants株価収集
 
 `main.py`は、J-Quants V2を使用して指定期間の日本株データをSQLiteへ保存します。通常の17:00日次タスクは`run_daily.bat`からyfinanceを使用し、18:00配当タスクはJ-Quantsを使用します。

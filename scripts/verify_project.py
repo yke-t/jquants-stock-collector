@@ -33,6 +33,7 @@ UNIT_TEST_MODULES = [
     "tests.test_price_basis",
     "tests.test_backtest_wfa",
     "tests.test_forward_evaluation",
+    "tests.test_backup_database",
 ]
 REQUIRED_TABLES = {
     "prices",

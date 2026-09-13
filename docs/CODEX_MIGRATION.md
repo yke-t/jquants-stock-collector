@@ -162,6 +162,21 @@ Codex worktrees do not automatically contain ignored files such as
 DB-aware work, or move data/configuration to explicitly configured shared paths
 before adopting worktree-based scheduled execution.
 
+## Database backup and restore drill
+
+Use `scripts\backup_database.py` to create a new SQLite online backup from a
+read-only source connection. The command refuses to overwrite an existing
+backup or result file, checks available space before copying, verifies the
+backup with `PRAGMA quick_check`, and compares its schema hash and every user
+table row count with the source snapshot. With `--restore-drill`, it restores
+the backup into a temporary database in the backup directory, repeats the same
+checks, and removes only that temporary restore directory afterward.
+
+Keep backups and their verification JSON outside the repository. The command
+does not implement retention deletion and never replaces `stock_data.db`.
+Restoring over the production path remains a separate, explicitly approved
+operation that requires stopped workflows and another verified checkpoint.
+
 ## Operational blockers
 
 - Dividend scans and backtests now multiply per-share financial values by
