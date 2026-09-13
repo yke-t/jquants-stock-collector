@@ -129,9 +129,12 @@ results, terminal log markers, database freshness, generated artifacts, and
 missed-run counts all pass. It reports failures, inspection errors, or a run
 that is still pending at 20:00, but it never starts a workflow, repairs the
 database, changes credentials, or writes to an external service. Until P6j is
-complete, the same heartbeat also performs the frozen P6i read-only forward
-evaluation check; afterward it continues only the operational audit. The local
-computer and Codex desktop app must be running for this local-file monitor.
+complete, the same heartbeat also performs the first frozen P6i read-only
+forward-evaluation check. It then continues the same unchanged protocol at 63,
+126, and 252 trading sessions for P6k, P6l, and P6m. Only the 252-session run
+may decide the preregistered targets. After P6m it continues only the
+operational audit. The local computer and Codex desktop app must be running for
+this local-file monitor.
 
 All three batch entry points delegate their outer invocation to
 `scripts\run_with_lock.ps1`. The runner uses one global Windows named mutex so
