@@ -37,6 +37,7 @@ UNIT_TEST_MODULES = [
     "tests.test_backup_retention",
     "tests.test_audit_data_coverage",
     "tests.test_refresh_listed_info",
+    "tests.test_repair_price_code_transition",
 ]
 REQUIRED_TABLES = {
     "prices",

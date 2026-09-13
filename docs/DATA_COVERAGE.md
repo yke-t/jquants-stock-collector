@@ -108,6 +108,17 @@ python -m src.update_yfinance --lookback-days 14 `
 
 `--code`を省略した場合だけ、通常の日次戦略対象全体を取得する。
 
+銘柄コード移行により旧コードへ新銘柄の価格が保存された場合は、まずドライランで
+対象件数とSHA-256を固定する。適用には、その値と現在のDBに一致する復元検証済み
+バックアップがすべて必要になる。
+
+```powershell
+python scripts\repair_price_code_transition.py `
+  --source-code 44490 `
+  --target-code 590A0 `
+  --cutoff-date 2026-06-29
+```
+
 ## 解釈上の注意
 
 - 95%は「戦略対象の日次価格」の運用下限であり、全上場銘柄の取得目標ではない。

@@ -106,6 +106,7 @@ scripts/verify_project.py   Codex向けオフライン検証
 scripts/audit_scheduled_operations.py 定期処理の読み取り専用監査
 scripts/audit_data_coverage.py 銘柄マスター・日次価格・配当財務の鮮度／カバー率監査
 scripts/refresh_listed_info.py J-Quants銘柄マスターの検証付き更新（既定はドライラン）
+scripts/repair_price_code_transition.py 銘柄コード移行時の価格誤帰属を検証付きで修復
 scripts/analyze_signal_performance.py 保存シグナルの株式単位検証・成績分析
 scripts/build_signal_analysis_report.py 分析JSONから検証用レポート定義を構築
 scripts/run_with_lock.ps1   BAT共通の排他実行・ログ世代管理
