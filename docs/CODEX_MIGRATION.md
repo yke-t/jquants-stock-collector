@@ -77,8 +77,9 @@ the failure is not a J-Quants regression or a permanent Sheets authorization
 failure. Google Sheets operations now retry only HTTP 429/500/502/503/504 and
 connection timeouts, up to five attempts with 2/4/8/16-second delays. Permission
 and configuration failures still fail immediately. The retry behavior is
-offline-tested; its first scheduled write remains operationally unverified
-until the next task result and log terminal marker are inspected.
+offline-tested and was operationally verified by the 2026-09-04 scheduled-write
+audit. Subsequent audited scheduled writes remained successful through
+2026-09-11.
 
 Run the read-only operational audit after the 18:00 workflow has finished:
 
