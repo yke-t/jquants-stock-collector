@@ -122,6 +122,17 @@ The script configures these local tasks without starting any workflow:
 - `NISA-JQuant Dividend Daily`: Monday through Friday at 18:00.
 - `SnowMoney_Monthly_Eval`: retained without modification.
 
+The Codex app heartbeat `J-Quants 日次監査・P6iチェック` runs Monday through
+Friday at 20:00 local time, after both daily workflows. It executes only
+`python scripts\audit_scheduled_operations.py` and stays silent when the task
+results, terminal log markers, database freshness, generated artifacts, and
+missed-run counts all pass. It reports failures, inspection errors, or a run
+that is still pending at 20:00, but it never starts a workflow, repairs the
+database, changes credentials, or writes to an external service. Until P6j is
+complete, the same heartbeat also performs the frozen P6i read-only forward
+evaluation check; afterward it continues only the operational audit. The local
+computer and Codex desktop app must be running for this local-file monitor.
+
 All three batch entry points delegate their outer invocation to
 `scripts\run_with_lock.ps1`. The runner uses one global Windows named mutex so
 manual launches and different scheduled workflows cannot run concurrently. A
